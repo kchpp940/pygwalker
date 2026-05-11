@@ -108,29 +108,82 @@ def _config_adapter(config: str) -> str:
 
 
 def fill_new_fields(config: List[Dict[str, Any]], all_fields: List[Dict[str, str]]) -> List[Dict[str, Any]]:
-    """when df schema changed, fill new fields to every chart config"""
+    """when df schema changed, fill new fields to every chart config and update existing fields"""
     config = deepcopy(config)
+    
+    all_fields_map = {field["fid"]: field for field in all_fields}
+    
+    encoding_channels = [
+        "rows", "columns", "color", "opacity", "size", "shape", 
+        "radius", "theta", "longitude", "latitude", "geoId", 
+        "details", "filters", "text"
+    ]
+    
     for chart_item in config:
-        field_set = {
-            field["fid"]
-            for field in chart_item["encodings"]["dimensions"] + chart_item["encodings"]["measures"]
-        }
+        encodings = chart_item["encodings"]
+        
+        existing_fids = set()
+        
+        def _update_field(field: Dict[str, Any]) -> Dict[str, Any]:
+            """Update field properties from all_fields if fid matches"""
+            if field.get("computed", False):
+                return field
+            
+            fid = field.get("fid")
+            if fid is None or fid not in all_fields_map:
+                return field
+            
+            existing_fids.add(fid)
+            source_field = all_fields_map[fid]
+            
+            updated_field = {
+                **field,
+                "name": source_field.get("name", field.get("name", "")),
+                "analyticType": source_field.get("analyticType", field.get("analyticType", "dimension")),
+                "semanticType": source_field.get("semanticType", field.get("semanticType", "nominal")),
+            }
+            
+            if "basename" not in updated_field:
+                updated_field["basename"] = updated_field["name"]
+            
+            return updated_field
+        
+        for field in encodings.get("dimensions", []):
+            existing_fids.add(field.get("fid"))
+        
+        for field in encodings.get("measures", []):
+            existing_fids.add(field.get("fid"))
+        
+        encodings["dimensions"] = [
+            _update_field(field) for field in encodings.get("dimensions", [])
+        ]
+        encodings["measures"] = [
+            _update_field(field) for field in encodings.get("measures", [])
+        ]
+        
+        for channel in encoding_channels:
+            if channel in encodings and isinstance(encodings[channel], list):
+                encodings[channel] = [
+                    _update_field(field) for field in encodings[channel]
+                ]
+        
         new_dimension_fields = []
         new_measure_fields = []
         for field in all_fields:
-            if field["fid"] not in field_set:
+            if field["fid"] not in existing_fids:
                 gw_field = {
                     **field,
                     "basename": field["name"],
-                    "dragId": "GW_" + rand_str()
+                    "dragId": "GW_" + rand_str(),
+                    "offset": 0
                 }
                 if field["analyticType"] == "dimension":
                     new_dimension_fields.append(gw_field)
                 else:
                     new_measure_fields.append(gw_field)
 
-        chart_item["encodings"]["dimensions"].extend(new_dimension_fields)
-        chart_item["encodings"]["measures"].extend(new_measure_fields)
+        encodings["dimensions"].extend(new_dimension_fields)
+        encodings["measures"].extend(new_measure_fields)
     return config
 
 

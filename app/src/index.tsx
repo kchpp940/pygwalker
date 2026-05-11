@@ -374,7 +374,7 @@ const initOnHttpCommunication = async(props: IAppProps) => {
     communicationStore.setComm(comm);
     if ((props.gwMode === "explore" || props.gwMode === "filter_renderer") && props.needLoadLastSpec) {
         const visSpecResp = await comm.sendMsg("get_latest_vis_spec", {});
-        props.visSpec = visSpecResp["data"]["visSpec"];
+        props.visSpec = FormatSpec(visSpecResp["data"]["visSpec"], props.rawFields);
     }
     await initDslParser();
 }
@@ -384,7 +384,7 @@ const initOnAnywidgetCommunication = async(props: IAppProps, model: import("@any
     communicationStore.setComm(comm);
     if ((props.gwMode === "explore" || props.gwMode === "filter_renderer") && props.needLoadLastSpec) {
         const visSpecResp = await comm.sendMsg("get_latest_vis_spec", {});
-        props.visSpec = visSpecResp["data"]["visSpec"];
+        props.visSpec = FormatSpec(visSpecResp["data"]["visSpec"], props.rawFields);
     }
     await initDslParser();
 }
