@@ -28,6 +28,8 @@ import { getExportTool } from './tools/exportTool';
 import { getExportDataframeTool } from './tools/exportDataframe';
 import { getRuncellTool } from './tools/runcellTool';
 import { getFilterTool } from './tools/filterTool';
+import { getBatchManageTool } from './tools/batchManageTool';
+import ConnectedBatchManageModal from './components/batchManageModal/ConnectedBatchManageModal';
 import { formatExportedChartDatas } from "./utils/save";
 import EnhancedFilterPanel from './components/enhancedFilter';
 import filterStore from "./store/filter";
@@ -218,8 +220,9 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     const exportTool = getExportTool(setExportOpen);
     const openInDesktopTool = getOpenDesktopTool(props, storeRef);
     const filterTool = getFilterTool();
+    const batchManageTool = getBatchManageTool(props, storeRef, setIsChanged);
 
-    const tools = [runcellTool, exportTool, openInDesktopTool, filterTool];
+    const tools = [runcellTool, exportTool, openInDesktopTool, filterTool, batchManageTool];
     if (props.env && ["jupyter_widgets", "streamlit", "gradio", "marimo", "anywidget", "web_server"].indexOf(props.env) !== -1 && props.useSaveTool) {
         const saveTool = getSaveTool(props, gwRef, storeRef, isChanged, setIsChanged);
         tools.push(saveTool);
@@ -316,6 +319,7 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
                 dataSource={props.dataSource || []}
                 onApply={handleApplyFilter}
             />
+            <ConnectedBatchManageModal />
             {
                 !hideModeOption &&
                 <Select onValueChange={modeChange} defaultValue='walker' >
