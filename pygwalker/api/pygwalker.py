@@ -36,7 +36,8 @@ from pygwalker.services.upload_data import (
     BatchUploadDatasToolOnJupyter
 )
 from pygwalker.services.config import get_local_user_id
-from pygwalker.services.spec import get_spec_json, fill_new_fields
+from pygwalker.services.spec_pipeline import load_spec
+from pygwalker.services.spec_persistence import build_update_spec_obj, build_upload_spec_obj
 from pygwalker.services.data_parsers import get_parser
 from pygwalker.services.cloud_service import CloudService
 from pygwalker.services.check_update import check_update
@@ -160,11 +161,8 @@ class PygWalker:
         return "client"
 
     def _init_spec(self, spec: Dict[str, Any], field_specs: List[FieldSpec]):
-        spec_obj, spec_type = get_spec_json(spec)
-        if spec_type.startswith("vega"):
-            self._update_vis_spec(spec_obj["config"])
-        else:
-            self._update_vis_spec(spec_obj["config"] and fill_new_fields(spec_obj["config"], field_specs))
+        spec_obj, spec_type = load_spec(spec, field_specs)
+        self._update_vis_spec(spec_obj["config"])
         self.spec_type = spec_type
         self._chart_map = self._parse_chart_map_dict(spec_obj["chart_map"])
         self.spec_version = spec_obj.get("version", None)
@@ -392,12 +390,10 @@ class PygWalker:
             self._chart_map[data["title"]] = chart_data
 
         def update_spec(data: Dict[str, Any]):
-            spec_obj = {
-                "config": data["visSpec"],
-                "chart_map": {},
-                "version": __version__,
-                "workflow_list": data.get("workflowList", [])
-            }
+            spec_obj = build_update_spec_obj(
+                vis_spec=data["visSpec"],
+                workflow_list=data.get("workflowList")
+            )
             self._update_vis_spec(data["visSpec"])
             self.spec_version = __version__
             self.workflow_list = data.get("workflowList", [])
@@ -417,12 +413,10 @@ class PygWalker:
             if data["newToken"]:
                 set_config({"kanaries_token": data["newToken"]})
                 GlobalVarManager.kanaries_api_key = data["newToken"]
-            spec_obj = {
-                "config": self.vis_spec,
-                "chart_map": {},
-                "version": __version__,
-                "workflow_list": self.workflow_list,
-            }
+            spec_obj = build_upload_spec_obj(
+                vis_spec=self.vis_spec,
+                workflow_list=self.workflow_list
+            )
             file_name = data["fileName"]
             workspace_name = self.cloud_service.get_kanaries_user_info()["workspaceName"]
             path = f"{workspace_name}/{file_name}"
