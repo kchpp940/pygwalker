@@ -10,7 +10,12 @@ from ipylab import JupyterFrontEnd
 from pygwalker.utils.encode import DataFrameEncoder
 from pygwalker.utils.display import display_html
 from pygwalker.utils.randoms import generate_hash_code
-from pygwalker.services.render import jinja_env, GWALKER_SCRIPT_BASE64, compress_data
+from pygwalker.services.render import (
+    jinja_env,
+    GWALKER_SCRIPT_BASE64,
+    compress_data,
+    apply_scatter_plot_sampling
+)
 
 
 class ImgData(BaseModel):
@@ -46,9 +51,10 @@ def render_gw_preview_html(
         vis_spec_obj,
         datas
     ):
+        sampled_data = apply_scatter_plot_sampling(vis_spec_item, data)
         charts.append({
             "visSpec": vis_spec_item,
-            "data": data
+            "data": sampled_data
         })
 
     props = {"charts": charts, "themeKey": theme_key, "dark": appearance, "gid": gid}
@@ -79,10 +85,11 @@ def render_gw_chart_preview_html(
     """
     Render html for single chart(use purerenderer mode of graphic-wlaker, not png preview)
     """
+    sampled_data = apply_scatter_plot_sampling(single_vis_spec, data)
 
     props = {
         "visSpec": single_vis_spec,
-        "data": data,
+        "data": sampled_data,
         "themeKey": theme_key,
         "title": title,
         "desc": desc,

@@ -8,9 +8,18 @@ import zlib
 from jinja2 import Environment, PackageLoader
 
 from pygwalker._typing import IAppearance
-from pygwalker._constants import ROOT_DIR
+from pygwalker._constants import (
+    ROOT_DIR,
+    SCATTER_PLOT_SAMPLE_LIMIT,
+    SCATTER_PLOT_LARGE_DATA_THRESHOLD,
+    SMART_SAMPLE_MIN_SIZE
+)
 from pygwalker.utils.encode import DataFrameEncoder
-from pygwalker.utils.estimate_tools import estimate_average_data_size
+from pygwalker.utils.estimate_tools import (
+    estimate_average_data_size,
+    smart_sample_datas,
+    sample_datas_by_byte_limit
+)
 from pygwalker.services.global_var import GlobalVarManager
 
 jinja_env = Environment(
@@ -32,12 +41,56 @@ with open(os.path.join(ROOT_DIR, 'templates', 'dist', 'pygwalker-app.iife.js'), 
 
 
 def get_max_limited_datas(datas: List[Dict[str, Any]], byte_limit: int) -> List[Dict[str, Any]]:
-    if len(datas) > 1024:
-        avg_size = estimate_average_data_size(datas)
-        n = int(byte_limit / avg_size)
-        if len(datas) >= 2 * n:
-            return datas[:n]
-    return datas
+    """
+    Smart data sampling based on byte limit.
+    Preserves data distribution characteristics.
+    """
+    return sample_datas_by_byte_limit(
+        datas,
+        byte_limit,
+        min_sample_size=SMART_SAMPLE_MIN_SIZE
+    )
+
+
+def is_scatter_plot_spec(spec: Dict[str, Any]) -> bool:
+    """
+    Check if a visualization spec represents a scatter plot.
+    
+    Scatter plot characteristics:
+    - geoms contains "point" or "circle"
+    - defaultAggregated is False (no aggregation)
+    """
+    config = spec.get("config", {})
+    geoms = config.get("geoms", [])
+    
+    is_point_geom = any(g in geoms for g in ["point", "circle", "tick"])
+    is_not_aggregated = not config.get("defaultAggregated", False)
+    
+    return is_point_geom and is_not_aggregated
+
+
+def apply_scatter_plot_sampling(
+    spec: Dict[str, Any],
+    datas: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """
+    Apply sampling specifically for scatter plots.
+    
+    Strategy:
+    1. Small datasets (< SCATTER_PLOT_LARGE_DATA_THRESHOLD): no sampling
+    2. Large datasets: sample to SCATTER_PLOT_SAMPLE_LIMIT points
+    """
+    if not is_scatter_plot_spec(spec):
+        return datas
+    
+    n = len(datas)
+    
+    if n <= SCATTER_PLOT_LARGE_DATA_THRESHOLD:
+        return datas
+    
+    sample_size = min(SCATTER_PLOT_SAMPLE_LIMIT, SCATTER_PLOT_LARGE_DATA_THRESHOLD // 2)
+    
+    return smart_sample_datas(datas, sample_size, preserve_boundaries=True)
 
 
 def render_iframe_messages_html(gid: str) -> str:

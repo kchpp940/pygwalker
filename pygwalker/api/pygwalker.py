@@ -21,7 +21,8 @@ from pygwalker.services.render import (
     render_gwalker_html,
     render_gwalker_iframe,
     get_max_limited_datas,
-    render_iframe_messages_html
+    render_iframe_messages_html,
+    apply_scatter_plot_sampling
 )
 from pygwalker.services.config import set_config
 from pygwalker.services.preview_image import (
@@ -132,7 +133,6 @@ class PygWalker:
         data_parser = get_parser(
             dataset,
             field_specs,
-            infer_string_to_date=True,
             other_params={"kanaries_api_key": kanaries_api_key}
         )
         if not cloud_computation:
@@ -148,7 +148,6 @@ class PygWalker:
         return get_parser(
             dataset_id,
             field_specs,
-            infer_string_to_date=True,
             other_params={"kanaries_api_key": kanaries_api_key}
         )
 
@@ -356,9 +355,10 @@ class PygWalker:
         from pygwalker.utils.dsl_transform import dsl_to_workflow
         workflow = dsl_to_workflow(spec)
         data = self.data_parser.get_datas_by_payload(workflow)
+        sampled_data = apply_scatter_plot_sampling(spec, data)
         return render_gw_chart_preview_html(
             single_vis_spec=spec,
-            data=data,
+            data=sampled_data,
             theme_key=self.theme_key,
             title=title,
             desc=desc,
