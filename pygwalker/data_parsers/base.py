@@ -5,8 +5,6 @@ from datetime import datetime, date
 from datetime import timedelta
 import abc
 import io
-import math
-import numbers
 
 from pydantic import BaseModel
 import duckdb
@@ -147,98 +145,6 @@ class BaseDataFrameDataParser(Generic[DataFrame], BaseDataParser):
         self.infer_string_to_date = infer_string_to_date
         self.infer_number_to_dimension = infer_number_to_dimension
         self.other_params = other_params
-
-    @abc.abstractmethod
-    def _is_numeric_dtype(self, s: Any) -> bool:
-        """Check if series dtype is numeric"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _is_temporal_dtype(self, s: Any) -> bool:
-        """Check if series dtype is temporal"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _is_integer_dtype(self, s: Any) -> bool:
-        """Check if series dtype is integer"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _is_string_like_dtype(self, s: Any) -> bool:
-        """Check if series dtype is string-like (object, string, etc.)"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _get_sample_values(self, s: Any, n: int) -> List[Any]:
-        """Get first n sample values from series"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _get_unique_count(self, s: Any) -> int:
-        """Get count of unique values in series"""
-        raise NotImplementedError
-
-    def _is_invalid_sample(self, value: Any) -> bool:
-        """Check if a sample value is invalid and should be skipped during inference.
-
-        Invalid samples include:
-        - None
-        - NaN (for numeric types)
-        - Empty strings (after stripping)
-        """
-        if value is None:
-            return True
-
-        if isinstance(value, numbers.Real):
-            return math.isnan(value)
-
-        if isinstance(value, str):
-            return value.strip() == ""
-
-        return False
-
-    def _clean_samples(self, samples: List[Any]) -> List[Any]:
-        """Filter out invalid samples.
-
-        Returns a list of valid samples, skipping None, NaN, and empty strings.
-        """
-        return [val for val in samples if not self._is_invalid_sample(val)]
-
-    def _infer_semantic_common(self, s: Any, field_name: str, samples: List[Any]) -> str:
-        """Common semantic type inference logic"""
-        if is_geo_field(field_name):
-            return "quantitative"
-
-        if self._is_numeric_dtype(s):
-            return "quantitative"
-
-        if self._is_temporal_dtype(s):
-            return "temporal"
-
-        if self._is_string_like_dtype(s):
-            clean_samples = self._clean_samples(samples)
-            for val in clean_samples:
-                if is_temporal_field(val, self.infer_string_to_date):
-                    return "temporal"
-
-        return "nominal"
-
-    def _infer_analytic_common(self, s: Any, field_name: str, unique_count: int) -> str:
-        """Common analytic type inference logic"""
-        if is_geo_field(field_name):
-            return "dimension"
-
-        if (
-            self.infer_number_to_dimension and
-            self._is_integer_dtype(s) and
-            unique_count <= 16
-        ):
-            return "dimension"
-
-        if self._is_numeric_dtype(s):
-            return "measure"
-
-        return "dimension"
 
     @property
     @lru_cache()

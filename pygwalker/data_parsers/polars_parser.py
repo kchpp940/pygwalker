@@ -36,31 +36,33 @@ class PolarsDataFrameDataParser(BaseDataFrameDataParser[pl.DataFrame]):
         })
         return df
 
-    def _is_numeric_dtype(self, s: pl.Series) -> bool:
-        return s.dtype in pl.NUMERIC_DTYPES
-
-    def _is_temporal_dtype(self, s: pl.Series) -> bool:
-        return s.dtype in pl.TEMPORAL_DTYPES
-
-    def _is_integer_dtype(self, s: pl.Series) -> bool:
-        return s.dtype in pl.INTEGER_DTYPES
-
-    def _is_string_like_dtype(self, s: pl.Series) -> bool:
-        return s.dtype == pl.Utf8
-
-    def _get_sample_values(self, s: pl.Series, n: int) -> List[Any]:
-        return [s[i] for i in range(min(len(s), n))]
-
-    def _get_unique_count(self, s: pl.Series) -> int:
-        return len(s.unique())
-
     def _infer_semantic(self, s: pl.Series, field_name: str):
-        samples = self._get_sample_values(s, 20)
-        return self._infer_semantic_common(s, field_name, samples)
+        kind = s.dtype
+
+        if kind in pl.NUMERIC_DTYPES or is_geo_field(field_name):
+            return "quantitative"
+        if kind in pl.TEMPORAL_DTYPES:
+            return "temporal"
+
+        for i in range(min(len(s), 20)):
+            if is_temporal_field(s[i], self.infer_string_to_date):
+                return "temporal"
+
+        return "nominal"
 
     def _infer_analytic(self, s: pl.Series, field_name: str):
-        unique_count = self._get_unique_count(s)
-        return self._infer_analytic_common(s, field_name, unique_count)
+        kind = s.dtype
+
+        if is_geo_field(field_name):
+            return "dimension"
+
+        if self.infer_number_to_dimension and kind in pl.INTEGER_DTYPES and len(s.unique()) <= 16:
+            return "dimension"
+
+        if kind in pl.NUMERIC_DTYPES:
+            return "measure"
+
+        return "dimension"
 
     @property
     def dataset_type(self) -> str:

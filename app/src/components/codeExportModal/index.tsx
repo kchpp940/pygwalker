@@ -5,7 +5,6 @@ import json from "react-syntax-highlighter/dist/esm/languages/hljs/json";
 import py from "react-syntax-highlighter/dist/esm/languages/hljs/python";
 import atomOneLight from "react-syntax-highlighter/dist/esm/styles/hljs/atom-one-light";
 import atomOneDark from "react-syntax-highlighter/dist/esm/styles/hljs/atom-one-dark";
-import type { VizSpecStore } from "@kanaries/graphic-walker/store/visualSpecStore";
 import type { IChart } from "@kanaries/graphic-walker/interfaces";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import commonStore from "@/store/common";
@@ -18,53 +17,45 @@ import { exportService } from "../../services/export";
 SyntaxHighlighter.registerLanguage("json", json);
 SyntaxHighlighter.registerLanguage("python", py);
 
-interface ICodeExport {
-    globalStore: React.MutableRefObject<VizSpecStore | null>;
-    sourceCode: string;
-    open: boolean;
-    setOpen: (open: boolean) => void;
-}
-
-const CodeExport: React.FC<ICodeExport> = observer((props) => {
-    const { globalStore, sourceCode, open, setOpen } = props;
+const CodeExport: React.FC = observer(() => {
     const [visSpec, setVisSpec] = useState<IChart[]>([]);
     const [tips, setTips] = useState<string>("");
     const darkMode = React.useContext(darkModeContext);
 
     const pyCode = useMemo(() => {
-        return exportService.generatePythonCode(sourceCode, visSpec, commonStore.version);
-    }, [sourceCode, visSpec, commonStore.version]);
+        return exportService.generatePythonCode(commonStore.sourceInvokeCode, visSpec, commonStore.version);
+    }, [commonStore.sourceInvokeCode, visSpec, commonStore.version]);
 
     const jsonCode = useMemo(() => {
         return exportService.generateJsonCode(visSpec);
     }, [visSpec]);
 
     const closeModal = useCallback(() => {
-        setOpen(false);
-    }, [setOpen]);
+        commonStore.closeModal("codeExport");
+    }, []);
 
     const copyToCliboard = async (content: string) => {
-        const success = await exportService.copyPythonCode(sourceCode, visSpec, commonStore.version);
+        const success = await exportService.copyPythonCode(commonStore.sourceInvokeCode, visSpec, commonStore.version);
         if (success) {
-            setOpen(false);
+            commonStore.closeModal("codeExport");
         } else {
             setTips("The Clipboard API has been blocked in this environment. Please copy manully.");
         }
     };
 
     useEffect(() => {
-        if (open && globalStore.current) {
-            const res = globalStore.current.exportCode();
+        if (commonStore.codeExportModalOpen && commonStore.storeRef?.current) {
+            const res = commonStore.storeRef.current.exportCode();
             setVisSpec(res);
         }
-    }, [open]);
+    }, [commonStore.codeExportModalOpen]);
 
     return (
         <Dialog
-            open={open}
+            open={commonStore.codeExportModalOpen}
             modal={false}
             onOpenChange={(show) => {
-                setOpen(show);
+                commonStore.setCodeExportModalOpen(show);
             }}
         >
             <DialogContent className="sm:max-w-[90%] lg:max-w-[900px]">
@@ -114,7 +105,7 @@ const CodeExport: React.FC<ICodeExport> = observer((props) => {
                                     onClick={async () => {
                                         const success = await exportService.copyJsonCode(visSpec);
                                         if (success) {
-                                            setOpen(false);
+                                            commonStore.closeModal("codeExport");
                                         } else {
                                             setTips("The Clipboard API has been blocked in this environment. Please copy manully.");
                                         }
