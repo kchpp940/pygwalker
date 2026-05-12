@@ -18,6 +18,7 @@ import { initJupyterCommunication, initHttpCommunication, streamlitComponentCall
 import communicationStore from "./store/communication"
 import { setConfig } from './utils/userConfig';
 import CodeExportModal from './components/codeExportModal';
+import ExportConfigModal from './components/exportConfigModal';
 import type { IPreviewProps, IChartPreviewProps } from './components/preview';
 import { Preview, ChartPreview } from './components/preview';
 import UploadSpecModal from "./components/uploadSpecModal"
@@ -155,6 +156,7 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     const gwRef = React.useRef<IGWHandler|null>(null);
     const { userConfig } = props;
     const [exportOpen, setExportOpen] = useState(false);
+    const [exportConfigOpen, setExportConfigOpen] = useState(false);
     const [mode, setMode] = useState<string>("walker");
     const [visSpec, setVisSpec] = useState(props.visSpec);
     const [hideModeOption, _] = useState(true);
@@ -214,7 +216,7 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     }, [mode]);
 
     const runcellTool = getRuncellTool();
-    const exportTool = getExportTool(setExportOpen);
+    const exportTool = getExportTool(setExportConfigOpen);
     const openInDesktopTool = getOpenDesktopTool(props, storeRef);
 
     const tools = [runcellTool, exportTool, openInDesktopTool];
@@ -305,6 +307,14 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
             <UploadSpecModal storeRef={storeRef} setGwIsChanged={setIsChanged} />
             <UploadChartModal gwRef={gwRef} storeRef={storeRef} dark={useContext(darkModeContext)} />
             <CodeExportModal open={exportOpen} setOpen={setExportOpen} globalStore={storeRef} sourceCode={props["sourceInvokeCode"] || ""} />
+            <ExportConfigModal 
+                open={exportConfigOpen} 
+                setOpen={setExportConfigOpen}
+                props={props}
+                gwRef={gwRef}
+                storeRef={storeRef}
+                sourceCode={props["sourceInvokeCode"] || ""}
+            />
             {
                 !hideModeOption &&
                 <Select onValueChange={modeChange} defaultValue='walker' >
