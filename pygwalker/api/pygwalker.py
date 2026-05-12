@@ -482,6 +482,12 @@ class PygWalker:
             GlobalVarManager.set_last_exported_dataframe(df)
             self._last_exported_dataframe = df
 
+        def _export_dataframe_by_data(data: Dict[str, Any]):
+            records = data.get("records", [])
+            df = pd.DataFrame(records)
+            GlobalVarManager.set_last_exported_dataframe(df)
+            self._last_exported_dataframe = df
+
         def _upload_to_cloud_charts(data: Dict[str, Any]):
             result = self.cloud_service.upload_cloud_chart(
                 data_parser=self.data_parser,
@@ -550,6 +556,7 @@ class PygWalker:
         if self.is_export_dataframe:
             comm.register("export_dataframe_by_payload", _export_dataframe_by_payload)
             comm.register("export_dataframe_by_sql", _export_dataframe_by_sql)
+            comm.register("export_dataframe_by_data", _export_dataframe_by_data)
 
     def _send_props_track(self, props: Dict[str, Any]):
         needed_fields = {

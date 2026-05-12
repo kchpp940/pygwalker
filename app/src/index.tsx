@@ -9,7 +9,6 @@ import { Streamlit, withStreamlitConnection } from "streamlit-component-lib"
 import { createRender, useModel } from "@anywidget/react";
 
 import Options from './components/options';
-import FieldQualityPanel from './components/fieldQualityPanel';
 import { IAppProps } from './interfaces';
 
 import { loadDataSource, postDataService, finishDataService, getDatasFromKernelBySql, getDatasFromKernelByPayload } from './dataSource';
@@ -28,7 +27,12 @@ import { getSaveTool } from './tools/saveTool';
 import { getExportTool } from './tools/exportTool';
 import { getExportDataframeTool } from './tools/exportDataframe';
 import { getRuncellTool } from './tools/runcellTool';
+import { getFilterTool } from './tools/filterTool';
 import { formatExportedChartDatas } from "./utils/save";
+import EnhancedFilterPanel from './components/enhancedFilter';
+import filterStore from "./store/filter";
+import { filterRows } from "./utils/filter";
+import type { IFieldMeta } from "./interfaces/filter";
 import { tracker } from "@/utils/tracker";
 import Notification from "./notify"
 import initDslParser from "@kanaries/gw-dsl-parser";
@@ -160,7 +164,7 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     const [hideModeOption, _] = useState(true);
     const [isChanged, setIsChanged] = useState(false);
     const storeRef = React.useRef<VizSpecStore|null>(null);
-    const disposerRef = React.useRef<() => void>();
+    const disposerRef = React.useRef<(() => void) | undefined>(undefined);
     const storeRefProxied = React.useMemo(
         () =>
             new Proxy(storeRef, {
@@ -213,8 +217,9 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     const runcellTool = getRuncellTool();
     const exportTool = getExportTool(setExportOpen);
     const openInDesktopTool = getOpenDesktopTool(props, storeRef);
+    const filterTool = getFilterTool();
 
-    const tools = [runcellTool, exportTool, openInDesktopTool];
+    const tools = [runcellTool, exportTool, openInDesktopTool, filterTool];
     if (props.env && ["jupyter_widgets", "streamlit", "gradio", "marimo", "anywidget", "web_server"].indexOf(props.env) !== -1 && props.useSaveTool) {
         const saveTool = getSaveTool(props, gwRef, storeRef, isChanged, setIsChanged);
         tools.push(saveTool);
@@ -251,7 +256,47 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
         return undefined;
     }, [props.showCloudTool, props.enableAskViz, props.enableVlChat]);
 
-    const computationCallback = React.useMemo(() => getComputationCallback(props), []);
+    const fieldMetas: IFieldMeta[] = React.useMemo(() => {
+        return props.rawFields.map(field => ({
+            fid: field.fid,
+            name: field.name || field.fid,
+            semanticType: (field.semanticType || "nominal") as any
+        }));
+    }, [props.rawFields]);
+
+    const [applyTrigger, setApplyTrigger] = useState(0);
+
+    const handleApplyFilter = useCallback(() => {
+        setApplyTrigger(prev => prev + 1);
+    }, []);
+
+    const filteredDataSource = React.useMemo(() => {
+        if (filterStore.hasActiveFilters && props.dataSource && !props.useKernelCalc) {
+            return filterRows(
+                props.dataSource,
+                filterStore.conditions,
+                filterStore.logic
+            );
+        }
+        return props.dataSource;
+    }, [props.dataSource, props.useKernelCalc, applyTrigger, filterStore.conditions, filterStore.logic]);
+
+    const computationCallback = React.useMemo(() => {
+        const baseCallback = getComputationCallback(props);
+        if (!props.useKernelCalc || !baseCallback) return baseCallback;
+        
+        return async (payload: any) => {
+            const result = await baseCallback(payload);
+            if (filterStore.hasActiveFilters && Array.isArray(result)) {
+                return filterRows(
+                    result,
+                    filterStore.conditions,
+                    filterStore.logic
+                );
+            }
+            return result;
+        };
+    }, [props, applyTrigger, filterStore.conditions, filterStore.logic]);
 
     const modeChange = (value: string) => {
         if (mode === "walker") {
@@ -260,26 +305,17 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
         setMode(value);
     }
   
-    const fieldNameMap = React.useMemo(() => {
-        const map: Record<string, string> = {};
-        props.rawFields.forEach(field => {
-            if (field.name) {
-                map[field.fid] = field.name;
-            }
-        });
-        return map;
-    }, [props.rawFields]);
-
     return (
         <React.StrictMode>
             <Notification />
-            <FieldQualityPanel 
-                fieldQualities={props.fieldQualities}
-                fieldNames={fieldNameMap}
-            />
             <UploadSpecModal storeRef={storeRef} setGwIsChanged={setIsChanged} />
             <UploadChartModal gwRef={gwRef} storeRef={storeRef} dark={useContext(darkModeContext)} />
             <CodeExportModal open={exportOpen} setOpen={setExportOpen} globalStore={storeRef} sourceCode={props["sourceInvokeCode"] || ""} />
+            <EnhancedFilterPanel 
+                fields={fieldMetas} 
+                dataSource={props.dataSource || []}
+                onApply={handleApplyFilter}
+            />
             {
                 !hideModeOption &&
                 <Select onValueChange={modeChange} defaultValue='walker' >
@@ -301,7 +337,7 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
                     vizThemeConfig={props.themeKey}
                     fieldkeyGuard={props.fieldkeyGuard}
                     fields={props.rawFields}
-                    data={props.useKernelCalc ? undefined : props.dataSource}
+                    data={props.useKernelCalc ? undefined : filteredDataSource}
                     storeRef={storeRefProxied}
                     ref={gwRef}
                     toolbar={toolbarConfig}
@@ -313,7 +349,7 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
                 /> :
                 <GraphicRendererApp
                     {...props}
-                    dataSource={props.dataSource}
+                    dataSource={filteredDataSource}
                     visSpec={visSpec}
                 />
             }

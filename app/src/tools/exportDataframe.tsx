@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import communicationStore from "../store/communication"
 import commonStore from '../store/common';
 import { tracker } from "@/utils/tracker";
+import filterStore from "../store/filter";
 
 import { DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { Loader2 } from "lucide-react"
@@ -10,6 +11,9 @@ import type { IAppProps } from '../interfaces';
 import { parser_dsl_with_meta } from "@kanaries/gw-dsl-parser";
 import type { ToolbarButtonItem } from "@kanaries/graphic-walker/components/toolbar/toolbar-button"
 import type { VizSpecStore } from '@kanaries/graphic-walker/store/visualSpecStore'
+import type { IRow, IDataQueryPayload } from '@kanaries/graphic-walker/interfaces';
+import { filterRows } from "../utils/filter";
+import { getDatasFromKernelByPayload, getDatasFromKernelBySql } from "../dataSource";
 
 export function getExportDataframeTool(
     props: IAppProps,
@@ -35,13 +39,48 @@ export function getExportDataframeTool(
         }, 500);
     }
 
+    const exportWithFilter = async () => {
+        let dataToExport: IRow[] = [];
+
+        if (!props.useKernelCalc) {
+            dataToExport = props.dataSource ? [...props.dataSource] : [];
+        } else {
+            const workflow = storeRef.current?.workflow ?? [];
+            const payload: IDataQueryPayload = {
+                workflow: workflow,
+                limit: undefined
+            };
+            
+            if (props.parseDslType === "server") {
+                dataToExport = await getDatasFromKernelByPayload(payload);
+            } else {
+                dataToExport = await getDatasFromKernelBySql(props.fieldMetas)(payload);
+            }
+        }
+
+        if (filterStore.hasActiveFilters) {
+            dataToExport = filterRows(
+                dataToExport,
+                filterStore.conditions,
+                filterStore.logic
+            );
+        }
+
+        await communicationStore.comm?.sendMsg("export_dataframe_by_data", {
+            records: dataToExport,
+            encodings: storeRef.current?.currentVis.encodings,
+        });
+    };
+
     const onClick = async () => {
         if (exporting) return;
         setExporting(true);
         tracker.track("click", {"entity": "export_dataframe_icon"});
 
         try {
-            if (props.parseDslType === "server") {
+            if (filterStore.hasActiveFilters) {
+                await exportWithFilter();
+            } else if (props.parseDslType === "server") {
                 await communicationStore.comm?.sendMsg("export_dataframe_by_payload", {
                     payload: {
                         workflow: storeRef.current?.workflow,
