@@ -49,15 +49,25 @@ export async function formatExportedChartDatas(chartData: IChartExportResult) {
             }],
             singleChart: ""
         }
-    } else {
-        const singleChart = await htmlToImage.toPng(
-            chartDom!,
-            {width: chartDom?.scrollWidth, height: chartDom?.scrollHeight}
-        )
+    }
+    
+    // 优先使用 Vega 原生生成的图表数据（包含完整的图例、坐标轴标题和颜色映射）
+    // 当有多个图表时，html-to-image 可能无法正确捕获 Shadow DOM 中的内容
+    if (chartData.charts.length === 1 && chartData.charts[0].data && chartData.charts[0].data.startsWith("data:image/")) {
         return {
             ...chartData,
-            singleChart
-        }
+            singleChart: chartData.charts[0].data
+        };
+    }
+    
+    // 回退到 html-to-image（用于多图表等场景）
+    const singleChart = await htmlToImage.toPng(
+        chartDom!,
+        {width: chartDom?.scrollWidth, height: chartDom?.scrollHeight}
+    )
+    return {
+        ...chartData,
+        singleChart
     }
 }
 
