@@ -5,7 +5,6 @@ import { reaction } from "mobx"
 import { GraphicWalker, PureRenderer, GraphicRenderer, TableWalker } from '@kanaries/graphic-walker'
 import type { VizSpecStore } from '@kanaries/graphic-walker/store/visualSpecStore'
 import type { IGWHandler, IViewField, ISegmentKey, IDarkMode, IChatMessage, IRow } from '@kanaries/graphic-walker/interfaces';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Streamlit, withStreamlitConnection } from "streamlit-component-lib"
 import { createRender, useModel } from "@anywidget/react";
 
@@ -495,32 +494,19 @@ function GraphicRendererApp(props: IAppProps) {
 
     return (
         <React.StrictMode>
-            <Tabs defaultValue="0" className="w-full">
-                <div className="overflow-x-auto max-w-full">
-                    <TabsList>
-                        {props.visSpec.map((chart, index) => {
-                            return <TabsTrigger key={index} value={index.toString()}>{chart.name}</TabsTrigger>
-                        })}
-                    </TabsList>
-                </div>
-                {props.visSpec.map((chart, index) => {
-                    return <TabsContent key={index} value={index.toString()}>
-                        {
-                            props.useKernelCalc ? 
-                            <GraphicRenderer
-                                {...globalProps}
-                                computation={computationCallback!}
-                                chart={[chart]}
-                            /> :
-                            <GraphicRenderer
-                                {...globalProps}
-                                data={props.dataSource!}
-                                chart={[chart]}
-                            />
-                        }
-                    </TabsContent>
-                })}
-            </Tabs>
+            {
+                props.useKernelCalc ? 
+                <GraphicRenderer
+                    {...globalProps}
+                    computation={computationCallback!}
+                    chart={props.visSpec}
+                /> :
+                <GraphicRenderer
+                    {...globalProps}
+                    data={props.dataSource!}
+                    chart={props.visSpec}
+                />
+            }
         </React.StrictMode>
     )
 }
