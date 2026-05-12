@@ -1,6 +1,46 @@
 import type { IRow, IMutField } from '@kanaries/graphic-walker/interfaces'
 import type { IDarkMode, IThemeKey, IComputationFunction } from '@kanaries/graphic-walker/interfaces';
 
+export interface IFieldQuality {
+    fid: string;
+    missingRate: number;
+    uniqueCount: number;
+    distinctRate: number;
+    dataType: string;
+    distribution: IFieldDistribution;
+    anomalies: IFieldAnomaly[];
+    warnings: string[];
+    isSuitableForAnalysis: boolean;
+}
+
+export interface IFieldDistribution {
+    type: string;
+    min?: number;
+    max?: number;
+    mean?: number;
+    stddev?: number;
+    variationRatio?: number;
+    topValues?: ITopValue[];
+    entropy?: number;
+    minDate?: string;
+    maxDate?: string;
+    [key: string]: any;
+}
+
+export interface ITopValue {
+    value: string;
+    count: number;
+}
+
+export interface IFieldAnomaly {
+    type: string;
+    description: string;
+    samples?: number[];
+    value?: string;
+    percentage?: number;
+    severity: "low" | "medium" | "high";
+}
+
 export interface IAppProps {
     // graphic-walker props
     fieldkeyGuard: boolean;
@@ -30,6 +70,7 @@ export interface IAppProps {
     needLoadLastSpec: boolean;
     extraConfig?: any;
     fieldMetas: any;
+    fieldQualities?: Record<string, IFieldQuality>;
     isExportDataFrame: boolean;
     defaultTab: "data" | "vis";
 }

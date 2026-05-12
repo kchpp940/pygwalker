@@ -608,6 +608,7 @@ class PygWalker:
             "datasetType": self.dataset_type,
             "extraConfig": self.other_props,
             "fieldMetas": self.data_parser.field_metas,
+            "fieldQualities": self.data_parser.field_qualities,
             "isExportDataFrame": self.is_export_dataframe,
             "defaultTab": self.default_tab,
             "useCloudCalc": self.cloud_computation

@@ -9,6 +9,7 @@ import { Streamlit, withStreamlitConnection } from "streamlit-component-lib"
 import { createRender, useModel } from "@anywidget/react";
 
 import Options from './components/options';
+import FieldQualityPanel from './components/fieldQualityPanel';
 import { IAppProps } from './interfaces';
 
 import { loadDataSource, postDataService, finishDataService, getDatasFromKernelBySql, getDatasFromKernelByPayload } from './dataSource';
@@ -259,9 +260,23 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
         setMode(value);
     }
   
+    const fieldNameMap = React.useMemo(() => {
+        const map: Record<string, string> = {};
+        props.rawFields.forEach(field => {
+            if (field.name) {
+                map[field.fid] = field.name;
+            }
+        });
+        return map;
+    }, [props.rawFields]);
+
     return (
         <React.StrictMode>
             <Notification />
+            <FieldQualityPanel 
+                fieldQualities={props.fieldQualities}
+                fieldNames={fieldNameMap}
+            />
             <UploadSpecModal storeRef={storeRef} setGwIsChanged={setIsChanged} />
             <UploadChartModal gwRef={gwRef} storeRef={storeRef} dark={useContext(darkModeContext)} />
             <CodeExportModal open={exportOpen} setOpen={setExportOpen} globalStore={storeRef} sourceCode={props["sourceInvokeCode"] || ""} />

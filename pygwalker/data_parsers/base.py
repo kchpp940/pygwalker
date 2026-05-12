@@ -14,6 +14,7 @@ import pytz
 from pygwalker._typing import DataFrame
 from pygwalker.utils.payload_to_sql import get_sql_from_payload
 from pygwalker.utils.estimate_tools import estimate_average_data_size
+from pygwalker.utils.field_quality import analyze_field_quality, field_quality_to_dict
 
 
 # pylint: disable=broad-except
@@ -113,6 +114,18 @@ class BaseDataParser(abc.ABC):
     def data_size(self) -> int:
         """Estimate data bytes size"""
         raise NotImplementedError
+
+    @property
+    def field_qualities(self) -> Dict[str, Any]:
+        """get field quality information"""
+        try:
+            qualities = analyze_field_quality(self)
+            return {
+                fid: field_quality_to_dict(quality)
+                for fid, quality in qualities.items()
+            }
+        except Exception:
+            return {}
 
 
 class BaseDataFrameDataParser(Generic[DataFrame], BaseDataParser):
