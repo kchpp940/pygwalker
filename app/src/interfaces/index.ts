@@ -84,25 +84,3 @@ export interface IUserConfig {
     [key: string]: any;
     privacy: 'events' | 'update-only' | 'offline';
 }
-
-export interface IChartItem {
-    index: number;
-    name: string;
-    visId: string;
-}
-
-export interface IBatchRenameConfig {
-    pattern: "prefix" | "suffix" | "numbered" | "replace";
-    value: string;
-    startIndex?: number;
-}
-
-export interface IBatchMoveConfig {
-    direction: "top" | "bottom" | "before" | "after";
-    targetIndex?: number;
-}
-
-export interface IBatchGroupConfig {
-    groupName: string;
-    createNewGroup: boolean;
-}

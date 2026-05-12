@@ -41,6 +41,7 @@ from pygwalker.services.data_parsers import get_parser
 from pygwalker.services.cloud_service import CloudService
 from pygwalker.services.check_update import check_update
 from pygwalker.services.track import track_event
+from pygwalker.services.recommendation_explainer import RecommendationExplainer
 from pygwalker.utils.randoms import generate_hash_code
 from pygwalker.communications.hacker_comm import HackerCommunication, BaseCommunication
 from pygwalker._constants import JUPYTER_BYTE_LIMIT, JUPYTER_WIDGETS_BYTE_LIMIT
@@ -458,8 +459,24 @@ class PygWalker:
                 "custom_ask_callback",
                 self.cloud_service.get_spec_by_text
             )
+            result = callback(data["metas"], data["query"])
+            
+            explanation = None
+            try:
+                field_qualities = self.data_parser.field_qualities
+                explainer = RecommendationExplainer(field_qualities)
+                
+                if isinstance(result, dict):
+                    spec_list = result.get("visSpec", []) or result.get("config", [])
+                    if spec_list:
+                        first_spec = spec_list[0] if isinstance(spec_list, list) else spec_list
+                        explanation = explainer.explain_recommendation(first_spec, data["metas"])
+            except Exception:
+                pass
+            
             return {
-                "data": callback(data["metas"], data["query"])
+                "data": result,
+                "explanation": explanation
             }
 
         def _get_chart_by_chats(data: Dict[str, Any]):
@@ -467,9 +484,43 @@ class PygWalker:
                 "custom_chat_callback",
                 self.cloud_service.get_chart_by_chats
             )
+            result = callback(data["metas"], data["chats"])
+            
+            explanation = None
+            try:
+                field_qualities = self.data_parser.field_qualities
+                explainer = RecommendationExplainer(field_qualities)
+                
+                if isinstance(result, dict):
+                    spec_list = result.get("visSpec", []) or result.get("config", [])
+                    if spec_list:
+                        first_spec = spec_list[0] if isinstance(spec_list, list) else spec_list
+                        explanation = explainer.explain_recommendation(first_spec, data["metas"])
+            except Exception:
+                pass
+            
             return {
-                "data": callback(data["metas"], data["chats"])
+                "data": result,
+                "explanation": explanation
             }
+
+        def _get_recommendation_explanation(data: Dict[str, Any]):
+            try:
+                field_qualities = self.data_parser.field_qualities
+                explainer = RecommendationExplainer(field_qualities)
+                spec = data.get("spec", {})
+                metas = data.get("metas", [])
+                explanation = explainer.explain_recommendation(spec, metas)
+                return {
+                    "data": explanation,
+                    "success": True
+                }
+            except Exception as e:
+                return {
+                    "data": None,
+                    "success": False,
+                    "error": str(e)
+                }
 
         def _export_dataframe_by_payload(data: Dict[str, Any]):
             df = pd.DataFrame(self.data_parser.get_datas_by_payload(data["payload"]))
@@ -546,6 +597,8 @@ class PygWalker:
             comm.register("upload_to_cloud_dashboard", _upload_to_cloud_dashboard)
             comm.register("get_spec_by_text", _get_spec_by_text)
             comm.register("get_chart_by_chats", _get_chart_by_chats)
+        
+        comm.register("get_recommendation_explanation", _get_recommendation_explanation)
 
         if self.kernel_computation:
             comm.register("get_datas", _get_datas)

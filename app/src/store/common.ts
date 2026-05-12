@@ -1,6 +1,5 @@
 import { makeObservable, observable, action } from 'mobx';
 import { ReactElement } from "react";
-import type { IBatchManageToolConfig } from '../tools/batchManageTool';
 
 interface IInitModalInfo {
     total: number;
@@ -29,8 +28,6 @@ class CommonStore {
     uploadSpecModalOpen: boolean = false;
     uploadChartModalOpen: boolean = false;
     isStreamlitComponent: boolean = false;
-    batchManageModalOpen: boolean = false;
-    batchManageConfig: IBatchManageToolConfig | null = null;
 
     setInitModalOpen(value: boolean) {
         this.initModalOpen = value;
@@ -68,14 +65,6 @@ class CommonStore {
         this.isStreamlitComponent = value;
     }
 
-    setBatchManageModalOpen(value: boolean) {
-        this.batchManageModalOpen = value;
-    }
-
-    setBatchManageConfig(config: IBatchManageToolConfig | null) {
-        this.batchManageConfig = config;
-    }
-
     constructor() {
         makeObservable(this, {
             initModalOpen: observable,
@@ -86,8 +75,6 @@ class CommonStore {
             uploadSpecModalOpen: observable,
             uploadChartModalOpen: observable,
             isStreamlitComponent: observable,
-            batchManageModalOpen: observable,
-            batchManageConfig: observable,
             setInitModalOpen: action,
             setInitModalInfo: action,
             setShowCloudTool: action,
@@ -95,9 +82,7 @@ class CommonStore {
             setNotification: action,
             setUploadSpecModalOpen: action,
             setUploadChartModalOpen: action,
-            setIsStreamlitComponent: action,
-            setBatchManageModalOpen: action,
-            setBatchManageConfig: action
+            setIsStreamlitComponent: action
         });
     }
 }

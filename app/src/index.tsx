@@ -23,18 +23,12 @@ import { Preview, ChartPreview } from './components/preview';
 import UploadSpecModal from "./components/uploadSpecModal"
 import UploadChartModal from './components/uploadChartModal';
 import InitModal from './components/initModal';
+import RecommendationExplanation, { RecommendationExplanationData } from './components/recommendationExplanation';
 import { getSaveTool } from './tools/saveTool';
 import { getExportTool } from './tools/exportTool';
 import { getExportDataframeTool } from './tools/exportDataframe';
 import { getRuncellTool } from './tools/runcellTool';
-import { getFilterTool } from './tools/filterTool';
-import { getBatchManageTool } from './tools/batchManageTool';
-import ConnectedBatchManageModal from './components/batchManageModal/ConnectedBatchManageModal';
 import { formatExportedChartDatas } from "./utils/save";
-import EnhancedFilterPanel from './components/enhancedFilter';
-import filterStore from "./store/filter";
-import { filterRows } from "./utils/filter";
-import type { IFieldMeta } from "./interfaces/filter";
 import { tracker } from "@/utils/tracker";
 import Notification from "./notify"
 import initDslParser from "@kanaries/gw-dsl-parser";
@@ -165,8 +159,11 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     const [visSpec, setVisSpec] = useState(props.visSpec);
     const [hideModeOption, _] = useState(true);
     const [isChanged, setIsChanged] = useState(false);
+    const [recommendationExplanation, setRecommendationExplanation] = useState<RecommendationExplanationData | null>(null);
+    const [explanationLoading, setExplanationLoading] = useState(false);
+    const [explanationDialogOpen, setExplanationDialogOpen] = useState(false);
     const storeRef = React.useRef<VizSpecStore|null>(null);
-    const disposerRef = React.useRef<(() => void) | undefined>(undefined);
+    const disposerRef = React.useRef<() => void>();
     const storeRefProxied = React.useMemo(
         () =>
             new Proxy(storeRef, {
@@ -219,10 +216,8 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     const runcellTool = getRuncellTool();
     const exportTool = getExportTool(setExportOpen);
     const openInDesktopTool = getOpenDesktopTool(props, storeRef);
-    const filterTool = getFilterTool();
-    const batchManageTool = getBatchManageTool(props, storeRef, setIsChanged);
 
-    const tools = [runcellTool, exportTool, openInDesktopTool, filterTool, batchManageTool];
+    const tools = [runcellTool, exportTool, openInDesktopTool];
     if (props.env && ["jupyter_widgets", "streamlit", "gradio", "marimo", "anywidget", "web_server"].indexOf(props.env) !== -1 && props.useSaveTool) {
         const saveTool = getSaveTool(props, gwRef, storeRef, isChanged, setIsChanged);
         tools.push(saveTool);
@@ -238,68 +233,64 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     }
 
     const enhanceAPI = React.useMemo(() => {
+        const features: Record<string, any> = {};
+        
         if (props.showCloudTool) {
-            const features: Record<string, any> = {};
             if (props.enableAskViz) {
                 features["askviz"] = async (metas: IViewField[], query: string) => {
+                    setExplanationLoading(true);
                     const resp = await communicationStore.comm?.sendMsg("get_spec_by_text", { metas, query });
-                    return resp?.data.data;
+                    const data = resp?.data.data;
+                    const explanation = resp?.data.explanation;
+                    
+                    if (explanation) {
+                        setRecommendationExplanation(explanation);
+                        setExplanationDialogOpen(true);
+                    }
+                    setExplanationLoading(false);
+                    
+                    return data;
                 };
             }
             if (props.enableVlChat) {
                 features["vlChat"] = async (metas: IViewField[], chats: IChatMessage[]) => {
+                    setExplanationLoading(true);
                     const resp = await communicationStore.comm?.sendMsg("get_chart_by_chats", { metas, chats });
-                    return resp?.data.data;
+                    const data = resp?.data.data;
+                    const explanation = resp?.data.explanation;
+                    
+                    if (explanation) {
+                        setRecommendationExplanation(explanation);
+                        setExplanationDialogOpen(true);
+                    }
+                    setExplanationLoading(false);
+                    
+                    return data;
                 };
             }
-            if (Object.keys(features).length > 0) {
-                return { features };
+        }
+        
+        features["getRecommendationExplanation"] = async (spec: any, metas: IViewField[]) => {
+            setExplanationLoading(true);
+            const resp = await communicationStore.comm?.sendMsg("get_recommendation_explanation", { spec, metas });
+            const explanation = resp?.data.data;
+            
+            if (explanation) {
+                setRecommendationExplanation(explanation);
+                setExplanationDialogOpen(true);
             }
+            setExplanationLoading(false);
+            
+            return explanation;
+        };
+        
+        if (Object.keys(features).length > 0) {
+            return { features };
         }
         return undefined;
     }, [props.showCloudTool, props.enableAskViz, props.enableVlChat]);
 
-    const fieldMetas: IFieldMeta[] = React.useMemo(() => {
-        return props.rawFields.map(field => ({
-            fid: field.fid,
-            name: field.name || field.fid,
-            semanticType: (field.semanticType || "nominal") as any
-        }));
-    }, [props.rawFields]);
-
-    const [applyTrigger, setApplyTrigger] = useState(0);
-
-    const handleApplyFilter = useCallback(() => {
-        setApplyTrigger(prev => prev + 1);
-    }, []);
-
-    const filteredDataSource = React.useMemo(() => {
-        if (filterStore.hasActiveFilters && props.dataSource && !props.useKernelCalc) {
-            return filterRows(
-                props.dataSource,
-                filterStore.conditions,
-                filterStore.logic
-            );
-        }
-        return props.dataSource;
-    }, [props.dataSource, props.useKernelCalc, applyTrigger, filterStore.conditions, filterStore.logic]);
-
-    const computationCallback = React.useMemo(() => {
-        const baseCallback = getComputationCallback(props);
-        if (!props.useKernelCalc || !baseCallback) return baseCallback;
-        
-        return async (payload: any) => {
-            const result = await baseCallback(payload);
-            if (filterStore.hasActiveFilters && Array.isArray(result)) {
-                return filterRows(
-                    result,
-                    filterStore.conditions,
-                    filterStore.logic
-                );
-            }
-            return result;
-        };
-    }, [props, applyTrigger, filterStore.conditions, filterStore.logic]);
+    const computationCallback = React.useMemo(() => getComputationCallback(props), []);
 
     const modeChange = (value: string) => {
         if (mode === "walker") {
@@ -314,12 +305,6 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
             <UploadSpecModal storeRef={storeRef} setGwIsChanged={setIsChanged} />
             <UploadChartModal gwRef={gwRef} storeRef={storeRef} dark={useContext(darkModeContext)} />
             <CodeExportModal open={exportOpen} setOpen={setExportOpen} globalStore={storeRef} sourceCode={props["sourceInvokeCode"] || ""} />
-            <EnhancedFilterPanel 
-                fields={fieldMetas} 
-                dataSource={props.dataSource || []}
-                onApply={handleApplyFilter}
-            />
-            <ConnectedBatchManageModal />
             {
                 !hideModeOption &&
                 <Select onValueChange={modeChange} defaultValue='walker' >
@@ -341,7 +326,7 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
                     vizThemeConfig={props.themeKey}
                     fieldkeyGuard={props.fieldkeyGuard}
                     fields={props.rawFields}
-                    data={props.useKernelCalc ? undefined : filteredDataSource}
+                    data={props.useKernelCalc ? undefined : props.dataSource}
                     storeRef={storeRefProxied}
                     ref={gwRef}
                     toolbar={toolbarConfig}
@@ -353,11 +338,17 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
                 /> :
                 <GraphicRendererApp
                     {...props}
-                    dataSource={filteredDataSource}
+                    dataSource={props.dataSource}
                     visSpec={visSpec}
                 />
             }
             <Options {...props} />
+            <RecommendationExplanation
+                explanation={recommendationExplanation}
+                isLoading={explanationLoading}
+                open={explanationDialogOpen}
+                onOpenChange={setExplanationDialogOpen}
+            />
         </React.StrictMode>
     );
 }
