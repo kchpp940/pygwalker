@@ -132,6 +132,7 @@ class PygWalker:
         data_parser = get_parser(
             dataset,
             field_specs,
+            infer_string_to_date=True,
             other_params={"kanaries_api_key": kanaries_api_key}
         )
         if not cloud_computation:
@@ -147,6 +148,7 @@ class PygWalker:
         return get_parser(
             dataset_id,
             field_specs,
+            infer_string_to_date=True,
             other_params={"kanaries_api_key": kanaries_api_key}
         )
 

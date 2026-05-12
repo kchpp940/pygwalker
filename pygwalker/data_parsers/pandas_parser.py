@@ -35,13 +35,17 @@ class PandasDataFrameDataParser(BaseDataFrameDataParser[pd.DataFrame]):
         return df
 
     def _infer_semantic(self, s: pd.Series, field_name: str):
-        example_value = s[0]
         kind = s.dtype.kind
 
         if kind in "fcmiu" or is_geo_field(field_name):
             return "quantitative"
-        if kind in "M" or (kind in "bOSUV" and is_temporal_field(example_value, self.infer_string_to_date)):
+        if kind in "M":
             return 'temporal'
+
+        if kind in "bOSUV":
+            for i in range(min(len(s), 20)):
+                if is_temporal_field(s.iloc[i], self.infer_string_to_date):
+                    return 'temporal'
 
         return "nominal"
 

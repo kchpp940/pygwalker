@@ -1,4 +1,5 @@
 import os.path
+from datetime import datetime
 
 from sqlalchemy import create_engine
 import pandas as pd
@@ -9,6 +10,7 @@ from pygwalker.services.data_parsers import get_parser
 from pygwalker.data_parsers.database_parser import Connector, text
 from pygwalker.data_parsers.database_parser import _check_view_sql
 from pygwalker.errors import ViewSqlSameColumnError
+from pygwalker.data_parsers.base import is_temporal_field
 
 datas = [
     {"name": "padnas", "count": 3, "date": "2022-01-01"},
@@ -108,3 +110,111 @@ def test_connector():
         assert connector.dialect_name == "duckdb"
         assert connector.view_sql == view_sql
         assert connector.url == database_url
+
+
+class TestTemporalFieldInference:
+    """Regression tests for temporal field inference."""
+
+    def test_is_temporal_field_with_native_datetime(self):
+        """Native datetime objects should be identified as temporal."""
+        assert is_temporal_field(datetime(2022, 1, 1), infer_string_to_date=False) is True
+        assert is_temporal_field(datetime(2022, 1, 1), infer_string_to_date=True) is True
+
+    def test_is_temporal_field_with_valid_date_string(self):
+        """Valid date strings should be identified when infer_string_to_date is True."""
+        assert is_temporal_field("2022-01-01", infer_string_to_date=True) is True
+        assert is_temporal_field("2022/01/01", infer_string_to_date=True) is True
+        assert is_temporal_field("2022-01-01 12:00:00", infer_string_to_date=True) is True
+
+    def test_is_temporal_field_with_none_values(self):
+        """None values should not be identified as temporal."""
+        assert is_temporal_field(None, infer_string_to_date=True) is False
+        assert is_temporal_field(None, infer_string_to_date=False) is False
+
+    def test_is_temporal_field_with_empty_string(self):
+        """Empty strings should not be identified as temporal."""
+        assert is_temporal_field("", infer_string_to_date=True) is False
+        assert is_temporal_field("   ", infer_string_to_date=True) is False
+
+    def test_is_temporal_field_with_invalid_date_string(self):
+        """Invalid date strings should not be identified as temporal."""
+        assert is_temporal_field("abc123", infer_string_to_date=True) is False
+        assert is_temporal_field("hello world", infer_string_to_date=True) is False
+        assert is_temporal_field("not-a-date", infer_string_to_date=True) is False
+
+    def test_is_temporal_field_with_numeric_strings(self):
+        """Numeric strings should not be identified as temporal."""
+        assert is_temporal_field("12345", infer_string_to_date=True) is False
+        assert is_temporal_field("123.45", infer_string_to_date=True) is False
+
+    def test_is_temporal_field_with_out_of_range_year(self):
+        """Dates with years outside reasonable range should not be identified as temporal."""
+        assert is_temporal_field("1000-01-01", infer_string_to_date=True) is False
+        assert is_temporal_field("2500-01-01", infer_string_to_date=True) is False
+
+    def test_parser_first_value_none_but_subsequent_are_dates(self):
+        """Parser should check multiple values - if first is None but others are dates (with infer_string_to_date=True)."""
+        datas = [
+            {"id": 1, "date_col": None},
+            {"id": 2, "date_col": "2022-01-01"},
+            {"id": 3, "date_col": "2022-01-02"},
+        ]
+        df = pd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    def test_parser_regular_strings_not_mistaken_for_dates(self):
+        """Regular strings should remain nominal."""
+        datas = [
+            {"id": 1, "category": "A"},
+            {"id": 2, "category": "B"},
+            {"id": 3, "category": "C"},
+        ]
+        df = pd.DataFrame(datas)
+        parser = get_parser(df)
+        cat_field = next(f for f in parser.raw_fields if f["fid"] == "category")
+        assert cat_field["semanticType"] == "nominal"
+
+    def test_parser_numeric_strings_not_mistaken_for_dates(self):
+        """Numeric strings should remain quantitative or nominal, not temporal."""
+        datas = [
+            {"id": 1, "code": "12345"},
+            {"id": 2, "code": "67890"},
+            {"id": 3, "code": "11111"},
+        ]
+        df = pd.DataFrame(datas)
+        parser = get_parser(df)
+        code_field = next(f for f in parser.raw_fields if f["fid"] == "code")
+        assert code_field["semanticType"] != "temporal"
+
+    def test_parser_pandas_datetime_type(self):
+        """Pandas datetime columns should be identified as temporal."""
+        datas = {"id": [1, 2], "value": [10, 20]}
+        df = pd.DataFrame(datas)
+        df["date_col"] = pd.to_datetime(["2022-01-01", "2022-01-02"])
+        parser = get_parser(df)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    def test_parser_default_infer_string_to_date_false(self):
+        """With default (infer_string_to_date=False), date strings should remain nominal."""
+        datas = [
+            {"id": 1, "date_col": "2022-01-01"},
+            {"id": 2, "date_col": "2022-01-02"},
+        ]
+        df = pd.DataFrame(datas)
+        parser = get_parser(df)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "nominal"
+
+    def test_parser_explicit_infer_string_to_date_true(self):
+        """With infer_string_to_date=True, date strings should be identified as temporal."""
+        datas = [
+            {"id": 1, "date_col": "2022-01-01"},
+            {"id": 2, "date_col": "2022-01-02"},
+        ]
+        df = pd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"

@@ -193,7 +193,7 @@ def to_chart_html(
     # Since the compatibility of quick js is not certain, the related methods are lazy loaded.
     from pygwalker.utils.dsl_transform import vega_to_dsl, dsl_to_workflow
 
-    data_parser = get_parser(dataset)
+    data_parser = get_parser(dataset, infer_string_to_date=True)
     if spec_type == "vega":
         gw_dsl = vega_to_dsl(spec, data_parser.raw_fields)
     else:

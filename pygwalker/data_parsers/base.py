@@ -231,14 +231,25 @@ class BaseDataFrameDataParser(Generic[DataFrame], BaseDataParser):
 
 def is_temporal_field(value: Any, infer_string_to_date: bool) -> bool:
     """check if field is temporal"""
-    if infer_string_to_date:
-        try:
-            arrow.get(str(value))
-        except Exception:
-            return False
+    if value is None:
+        return False
+
+    if isinstance(value, (datetime, date)):
         return True
 
-    return isinstance(value, (datetime, date))
+    if infer_string_to_date and isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return False
+        try:
+            parsed = arrow.get(value)
+            if parsed.year < 1900 or parsed.year > 2100:
+                return False
+            return True
+        except Exception:
+            return False
+
+    return False
 
 
 def is_geo_field(field_name: str) -> bool:
