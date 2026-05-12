@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
 import type { VizSpecStore } from '@kanaries/graphic-walker/store/visualSpecStore'
-import { chartToWorkflow } from "@kanaries/graphic-walker/utils/workflow";
 import { tracker } from "@/utils/tracker";
 
 import communicationStore from "../../store/communication";
@@ -12,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { badgeVariants } from "@/components/ui/badge";
+import { exportService } from '../../services/export';
 
 interface IUploadSpecModal {
     setGwIsChanged: React.Dispatch<React.SetStateAction<boolean>>;
@@ -70,19 +70,18 @@ const UploadSpecModal: React.FC<IUploadSpecModal> = observer((props) => {
     const saveSpecToLocal = () => {
         tracker.track("click", {"entity": "save_spec_to_local_file_button"});
         const visSpec = props.storeRef.current?.exportCode();
-        const configObj = {
-            config: visSpec,
-            chart_map: {},
-            version: commonStore.version,
-            workflow_list: visSpec?.map(spec => chartToWorkflow(spec).workflow),
+        if (visSpec) {
+            exportService.exportJson({
+                visSpec,
+                version: commonStore.version
+            }).then(result => {
+                if (result.success) {
+                    exportService.notify.success('Spec saved successfully', 'Save Success');
+                } else {
+                    exportService.notify.error(result.error || 'Failed to save spec', 'Save Error');
+                }
+            });
         }
-        const blob = new Blob([JSON.stringify(configObj)], {type: "text/plain;charset=utf-8"});
-        const url = URL.createObjectURL(blob);
-        const tempLink = document.createElement("a");
-        tempLink.href = url;
-        tempLink.download = `pygwalker_spec_${new Date().getTime()}.json`
-        tempLink.click();
-        URL.revokeObjectURL(url);
         commonStore.setUploadSpecModalOpen(false);
         props.setGwIsChanged(false);
     };

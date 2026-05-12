@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { observer } from "mobx-react-lite";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import json from "react-syntax-highlighter/dist/esm/languages/hljs/json";
@@ -13,8 +13,7 @@ import { darkModeContext } from "@/store/context";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { tracker } from "@/utils/tracker";
-
-import { usePythonCode } from "./usePythonCode";
+import { exportService } from "../../services/export";
 
 SyntaxHighlighter.registerLanguage("json", json);
 SyntaxHighlighter.registerLanguage("python", py);
@@ -32,21 +31,23 @@ const CodeExport: React.FC<ICodeExport> = observer((props) => {
     const [tips, setTips] = useState<string>("");
     const darkMode = React.useContext(darkModeContext);
 
-    const { pyCode } = usePythonCode({
-        sourceCode,
-        visSpec,
-        version: commonStore.version,
-    });
+    const pyCode = useMemo(() => {
+        return exportService.generatePythonCode(sourceCode, visSpec, commonStore.version);
+    }, [sourceCode, visSpec, commonStore.version]);
+
+    const jsonCode = useMemo(() => {
+        return exportService.generateJsonCode(visSpec);
+    }, [visSpec]);
 
     const closeModal = useCallback(() => {
         setOpen(false);
     }, [setOpen]);
 
     const copyToCliboard = async (content: string) => {
-        try {
-            navigator.clipboard.writeText(content);
+        const success = await exportService.copyPythonCode(sourceCode, visSpec, commonStore.version);
+        if (success) {
             setOpen(false);
-        } catch(e) {
+        } else {
             setTips("The Clipboard API has been blocked in this environment. Please copy manully.");
         }
     };
@@ -103,15 +104,20 @@ const CodeExport: React.FC<ICodeExport> = observer((props) => {
                         <TabsContent value="json">
                             <h3 className="text-sm font-medium mb-2">Graphic Walker Specification</h3>
                             <SyntaxHighlighter showLineNumbers language="json" style={darkMode === 'dark' ? atomOneDark : atomOneLight}>
-                                {JSON.stringify(visSpec, null, 2)}
+                                {jsonCode}
                             </SyntaxHighlighter>
                             <div className="text-xs max-h-56 mt-2">
                                 <p>{tips}</p>
                             </div>
                             <div className="mt-4 flex justify-start gap-2">
                                 <Button
-                                    onClick={() => {
-                                        copyToCliboard(JSON.stringify(visSpec, null, 2));
+                                    onClick={async () => {
+                                        const success = await exportService.copyJsonCode(visSpec);
+                                        if (success) {
+                                            setOpen(false);
+                                        } else {
+                                            setTips("The Clipboard API has been blocked in this environment. Please copy manully.");
+                                        }
                                         tracker.track("click", {"entity": "copy_code_button"});
                                     }}
                                 >

@@ -1,8 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { observer } from "mobx-react-lite";
-import JSZip from "jszip";
 import { tracker } from "@/utils/tracker";
-import { download } from "@/utils/save";
 import filterStore from "@/store/filter";
 import type { IAppProps } from "@/interfaces";
 import type { IGWHandler } from "@kanaries/graphic-walker/interfaces";
@@ -15,7 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { darkModeContext } from "@/store/context";
-import commonStore from "@/store/common";
+import { exportService } from "@/services/export";
+import { fileDownloadService } from "@/services/export";
+import { zipService } from "@/services/export";
 
 type ExportFormat = "png" | "svg" | "json" | "code";
 type ImageScale = 1 | 2 | 3 | 4;
@@ -177,9 +177,10 @@ const ExportConfigModal: React.FC<IExportConfigModalProps> = observer(({
             
             if (svgContent.startsWith("<svg")) {
                 svgContent = `<?xml version="1.0" encoding="UTF-8"?>\n${svgContent}`;
-                const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
-                const url = URL.createObjectURL(blob);
-                download(url, `${spec?.name || "chart"}.svg`, "image/svg+xml");
+                fileDownloadService.triggerDownload(
+                    fileDownloadService.createBlob(svgContent, "image/svg+xml;charset=utf-8"),
+                    `${spec?.name || "chart"}.svg`
+                );
             }
             return;
         }
@@ -195,7 +196,7 @@ const ExportConfigModal: React.FC<IExportConfigModalProps> = observer(({
                 imageScale
             );
             
-            download(imageData, `${spec?.name || "chart"}.png`, "image/png");
+            fileDownloadService.downloadFromDataUrl(imageData, `${spec?.name || "chart"}.png`);
         }
     };
 
@@ -206,7 +207,7 @@ const ExportConfigModal: React.FC<IExportConfigModalProps> = observer(({
             return;
         }
         
-        const zip = new JSZip();
+        const zipEntries: Array<{ filename: string; content: string | Blob; compress: boolean }> = [];
         
         for (let i = 0; i < allCharts.length; i++) {
             const chart = allCharts[i];
@@ -216,7 +217,11 @@ const ExportConfigModal: React.FC<IExportConfigModalProps> = observer(({
             if (format === "svg") {
                 if (chartData.startsWith("<svg")) {
                     const svgContent = `<?xml version="1.0" encoding="UTF-8"?>\n${chartData}`;
-                    zip.file(`${spec?.name || `chart_${i + 1}`}.svg`, svgContent);
+                    zipEntries.push({
+                        filename: `${spec?.name || `chart_${i + 1}`}.svg`,
+                        content: svgContent,
+                        compress: true
+                    });
                 }
             } else {
                 if (chartData.startsWith("data:image/")) {
@@ -227,15 +232,19 @@ const ExportConfigModal: React.FC<IExportConfigModalProps> = observer(({
                         spec?.description || "",
                         imageScale
                     );
-                    const base64Data = imageData.split(",")[1];
-                    zip.file(`${spec?.name || `chart_${i + 1}`}.png`, base64Data, { base64: true });
+                    const blob = fileDownloadService.dataUrlToBlob(imageData);
+                    zipEntries.push({
+                        filename: `${spec?.name || `chart_${i + 1}`}.png`,
+                        content: blob,
+                        compress: false
+                    });
                 }
             }
         }
         
-        const content = await zip.generateAsync({ type: "blob" });
-        const url = URL.createObjectURL(content);
-        download(url, `charts_${Date.now()}.zip`, "application/zip");
+        await zipService.exportZip(zipEntries, {
+            filename: `charts_${fileDownloadService.generateTimestamp()}.zip`
+        });
     };
 
     const exportImages = async () => {
@@ -287,10 +296,11 @@ const ExportConfigModal: React.FC<IExportConfigModalProps> = observer(({
             spec = spec.map(s => buildSpecWithContentPreference(s));
         }
         
-        const jsonStr = JSON.stringify(spec, null, 2);
-        const blob = new Blob([jsonStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        download(url, `chart_spec_${Date.now()}.json`, "application/json");
+        fileDownloadService.downloadText(
+            JSON.stringify(spec, null, 2),
+            `chart_spec_${fileDownloadService.generateTimestamp()}.json`,
+            "application/json"
+        );
     };
 
     const exportPythonCode = async () => {
@@ -310,9 +320,11 @@ const ExportConfigModal: React.FC<IExportConfigModalProps> = observer(({
         
         code += `\n# Create a PyGWalker instance with the specification\nwalker = pyg.walk(\n    df,  # Replace with your DataFrame\n    spec=vis_spec\n)`;
         
-        const blob = new Blob([code], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        download(url, `pygwalker_code_${Date.now()}.py`, "text/plain");
+        fileDownloadService.downloadText(
+            code,
+            `pygwalker_code_${fileDownloadService.generateTimestamp()}.py`,
+            "text/plain"
+        );
     };
 
     const handleExport = async () => {
@@ -339,18 +351,16 @@ const ExportConfigModal: React.FC<IExportConfigModalProps> = observer(({
             }
             
             closeModal();
-            commonStore.setNotification({
-                type: "success",
-                title: "Export Success",
-                message: "Your export has been completed successfully.",
-            }, 4000);
+            exportService.notify.success(
+                "Your export has been completed successfully.",
+                "Export Success"
+            );
         } catch (error) {
             console.error("Export error:", error);
-            commonStore.setNotification({
-                type: "error",
-                title: "Export Failed",
-                message: "An error occurred during export. Please try again.",
-            }, 4000);
+            exportService.notify.error(
+                "An error occurred during export. Please try again.",
+                "Export Failed"
+            );
         } finally {
             setIsExporting(false);
         }

@@ -18,13 +18,11 @@ import { initJupyterCommunication, initHttpCommunication, streamlitComponentCall
 import communicationStore from "./store/communication"
 import { setConfig } from './utils/userConfig';
 import CodeExportModal from './components/codeExportModal';
-import ExportConfigModal from './components/exportConfigModal';
 import type { IPreviewProps, IChartPreviewProps } from './components/preview';
 import { Preview, ChartPreview } from './components/preview';
 import UploadSpecModal from "./components/uploadSpecModal"
 import UploadChartModal from './components/uploadChartModal';
 import InitModal from './components/initModal';
-import RecommendationExplanation, { RecommendationExplanationData } from './components/recommendationExplanation';
 import { getSaveTool } from './tools/saveTool';
 import { getExportTool } from './tools/exportTool';
 import { getExportDataframeTool } from './tools/exportDataframe';
@@ -156,16 +154,12 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     const gwRef = React.useRef<IGWHandler|null>(null);
     const { userConfig } = props;
     const [exportOpen, setExportOpen] = useState(false);
-    const [exportConfigOpen, setExportConfigOpen] = useState(false);
     const [mode, setMode] = useState<string>("walker");
     const [visSpec, setVisSpec] = useState(props.visSpec);
     const [hideModeOption, _] = useState(true);
     const [isChanged, setIsChanged] = useState(false);
-    const [recommendationExplanation, setRecommendationExplanation] = useState<RecommendationExplanationData | null>(null);
-    const [explanationLoading, setExplanationLoading] = useState(false);
-    const [explanationDialogOpen, setExplanationDialogOpen] = useState(false);
     const storeRef = React.useRef<VizSpecStore|null>(null);
-    const disposerRef = React.useRef<() => void>();
+    const disposerRef = React.useRef<() => void>(() => {});
     const storeRefProxied = React.useMemo(
         () =>
             new Proxy(storeRef, {
@@ -216,7 +210,7 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     }, [mode]);
 
     const runcellTool = getRuncellTool();
-    const exportTool = getExportTool(setExportConfigOpen);
+    const exportTool = getExportTool(setExportOpen);
     const openInDesktopTool = getOpenDesktopTool(props, storeRef);
 
     const tools = [runcellTool, exportTool, openInDesktopTool];
@@ -235,59 +229,23 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     }
 
     const enhanceAPI = React.useMemo(() => {
-        const features: Record<string, any> = {};
-        
         if (props.showCloudTool) {
+            const features: Record<string, any> = {};
             if (props.enableAskViz) {
                 features["askviz"] = async (metas: IViewField[], query: string) => {
-                    setExplanationLoading(true);
                     const resp = await communicationStore.comm?.sendMsg("get_spec_by_text", { metas, query });
-                    const data = resp?.data.data;
-                    const explanation = resp?.data.explanation;
-                    
-                    if (explanation) {
-                        setRecommendationExplanation(explanation);
-                        setExplanationDialogOpen(true);
-                    }
-                    setExplanationLoading(false);
-                    
-                    return data;
+                    return resp?.data.data;
                 };
             }
             if (props.enableVlChat) {
                 features["vlChat"] = async (metas: IViewField[], chats: IChatMessage[]) => {
-                    setExplanationLoading(true);
                     const resp = await communicationStore.comm?.sendMsg("get_chart_by_chats", { metas, chats });
-                    const data = resp?.data.data;
-                    const explanation = resp?.data.explanation;
-                    
-                    if (explanation) {
-                        setRecommendationExplanation(explanation);
-                        setExplanationDialogOpen(true);
-                    }
-                    setExplanationLoading(false);
-                    
-                    return data;
+                    return resp?.data.data;
                 };
             }
-        }
-        
-        features["getRecommendationExplanation"] = async (spec: any, metas: IViewField[]) => {
-            setExplanationLoading(true);
-            const resp = await communicationStore.comm?.sendMsg("get_recommendation_explanation", { spec, metas });
-            const explanation = resp?.data.data;
-            
-            if (explanation) {
-                setRecommendationExplanation(explanation);
-                setExplanationDialogOpen(true);
+            if (Object.keys(features).length > 0) {
+                return { features };
             }
-            setExplanationLoading(false);
-            
-            return explanation;
-        };
-        
-        if (Object.keys(features).length > 0) {
-            return { features };
         }
         return undefined;
     }, [props.showCloudTool, props.enableAskViz, props.enableVlChat]);
@@ -307,14 +265,6 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
             <UploadSpecModal storeRef={storeRef} setGwIsChanged={setIsChanged} />
             <UploadChartModal gwRef={gwRef} storeRef={storeRef} dark={useContext(darkModeContext)} />
             <CodeExportModal open={exportOpen} setOpen={setExportOpen} globalStore={storeRef} sourceCode={props["sourceInvokeCode"] || ""} />
-            <ExportConfigModal 
-                open={exportConfigOpen} 
-                setOpen={setExportConfigOpen}
-                props={props}
-                gwRef={gwRef}
-                storeRef={storeRef}
-                sourceCode={props["sourceInvokeCode"] || ""}
-            />
             {
                 !hideModeOption &&
                 <Select onValueChange={modeChange} defaultValue='walker' >
@@ -353,12 +303,6 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
                 />
             }
             <Options {...props} />
-            <RecommendationExplanation
-                explanation={recommendationExplanation}
-                isLoading={explanationLoading}
-                open={explanationDialogOpen}
-                onOpenChange={setExplanationDialogOpen}
-            />
         </React.StrictMode>
     );
 }
