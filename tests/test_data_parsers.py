@@ -218,3 +218,273 @@ class TestTemporalFieldInference:
         parser = get_parser(df, infer_string_to_date=True)
         date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
         assert date_field["semanticType"] == "temporal"
+
+
+MODIN_AVAILABLE = False
+try:
+    from modin import pandas as mpd
+    MODIN_AVAILABLE = True
+except ImportError:
+    pass
+
+
+class TestParserConsistency:
+    """Regression tests: pandas, polars, modin must produce identical field inference."""
+
+    reference_datas = [
+        {"name": "A", "category": 1, "date_str": "2022-01-01", "latitude": 37.77, "longitude": -122.42, "small_int": 1, "price": 100.0},
+        {"name": "B", "category": 2, "date_str": "2022-01-02", "latitude": 40.71, "longitude": -74.00, "small_int": 2, "price": 200.0},
+        {"name": "C", "category": 3, "date_str": "2022-01-03", "latitude": 41.88, "longitude": -87.63, "small_int": 3, "price": 300.0},
+        {"name": "D", "category": 1, "date_str": "2022-01-04", "latitude": 34.05, "longitude": -118.24, "small_int": 1, "price": 400.0},
+    ]
+
+    expected_fields = {
+        "name": {"semanticType": "nominal", "analyticType": "dimension"},
+        "category": {"semanticType": "quantitative", "analyticType": "dimension"},
+        "date_str": {"semanticType": "temporal", "analyticType": "dimension"},
+        "latitude": {"semanticType": "quantitative", "analyticType": "dimension"},
+        "longitude": {"semanticType": "quantitative", "analyticType": "dimension"},
+        "small_int": {"semanticType": "quantitative", "analyticType": "dimension"},
+        "price": {"semanticType": "quantitative", "analyticType": "measure"},
+    }
+
+    def _assert_fields_match(self, fields, expected):
+        for f in fields:
+            fid = f["fid"]
+            assert f["semanticType"] == expected[fid]["semanticType"], f"{fid} semanticType mismatch"
+            assert f["analyticType"] == expected[fid]["analyticType"], f"{fid} analyticType mismatch"
+
+    def _get_inference(self, parser):
+        return {f["fid"]: {"semanticType": f["semanticType"], "analyticType": f["analyticType"]} for f in parser.raw_fields}
+
+    def test_pandas_field_inference(self):
+        """pandas: date string -> temporal, geo fields -> dimension, small integer -> dimension."""
+        df = pd.DataFrame(self.reference_datas)
+        parser = get_parser(df, infer_string_to_date=True, infer_number_to_dimension=True)
+        self._assert_fields_match(parser.raw_fields, self.expected_fields)
+
+    def test_polars_field_inference(self):
+        """polars: date string -> temporal, geo fields -> dimension, small integer -> dimension."""
+        df = pl.DataFrame(self.reference_datas)
+        parser = get_parser(df, infer_string_to_date=True, infer_number_to_dimension=True)
+        self._assert_fields_match(parser.raw_fields, self.expected_fields)
+
+    @pytest.mark.skipif(not MODIN_AVAILABLE, reason="modin not installed")
+    def test_modin_field_inference(self):
+        """modin: date string -> temporal, geo fields -> dimension, small integer -> dimension."""
+        df = mpd.DataFrame(self.reference_datas)
+        parser = get_parser(df, infer_string_to_date=True, infer_number_to_dimension=True)
+        self._assert_fields_match(parser.raw_fields, self.expected_fields)
+
+    def test_pandas_vs_polars_consistency(self):
+        """pandas and polars must agree on every field."""
+        pdf = pd.DataFrame(self.reference_datas)
+        pldf = pl.DataFrame(self.reference_datas)
+        p1 = get_parser(pdf, infer_string_to_date=True, infer_number_to_dimension=True)
+        p2 = get_parser(pldf, infer_string_to_date=True, infer_number_to_dimension=True)
+        assert self._get_inference(p1) == self._get_inference(p2)
+
+    @pytest.mark.skipif(not MODIN_AVAILABLE, reason="modin not installed")
+    def test_pandas_vs_modin_consistency(self):
+        """pandas and modin must agree on every field."""
+        pdf = pd.DataFrame(self.reference_datas)
+        mdf = mpd.DataFrame(self.reference_datas)
+        p1 = get_parser(pdf, infer_string_to_date=True, infer_number_to_dimension=True)
+        p2 = get_parser(mdf, infer_string_to_date=True, infer_number_to_dimension=True)
+        assert self._get_inference(p1) == self._get_inference(p2)
+
+    @pytest.mark.skipif(not MODIN_AVAILABLE, reason="modin not installed")
+    def test_pandas_polars_modin_all_consistent(self):
+        """pandas, polars, modin all three must produce identical field inference."""
+        pdf = pd.DataFrame(self.reference_datas)
+        pldf = pl.DataFrame(self.reference_datas)
+        mdf = mpd.DataFrame(self.reference_datas)
+        p_pandas = get_parser(pdf, infer_string_to_date=True, infer_number_to_dimension=True)
+        p_polars = get_parser(pldf, infer_string_to_date=True, infer_number_to_dimension=True)
+        p_modin = get_parser(mdf, infer_string_to_date=True, infer_number_to_dimension=True)
+        pandas_infer = self._get_inference(p_pandas)
+        assert self._get_inference(p_polars) == pandas_infer
+        assert self._get_inference(p_modin) == pandas_infer
+
+
+class TestOutlierHandling:
+    """Regression tests: outlier/exception sample handling across parsers."""
+
+    def test_pandas_none_values_skipped(self):
+        """None values should be skipped when inferring date strings."""
+        datas = [
+            {"id": 1, "date_col": None},
+            {"id": 2, "date_col": None},
+            {"id": 3, "date_col": "2022-01-01"},
+            {"id": 4, "date_col": "2022-01-02"},
+        ]
+        df = pd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    def test_polars_none_values_skipped(self):
+        """None values should be skipped when inferring date strings."""
+        datas = [
+            {"id": 1, "date_col": None},
+            {"id": 2, "date_col": None},
+            {"id": 3, "date_col": "2022-01-01"},
+            {"id": 4, "date_col": "2022-01-02"},
+        ]
+        df = pl.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    @pytest.mark.skipif(not MODIN_AVAILABLE, reason="modin not installed")
+    def test_modin_none_values_skipped(self):
+        """None values should be skipped when inferring date strings."""
+        datas = [
+            {"id": 1, "date_col": None},
+            {"id": 2, "date_col": None},
+            {"id": 3, "date_col": "2022-01-01"},
+            {"id": 4, "date_col": "2022-01-02"},
+        ]
+        df = mpd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    def test_pandas_empty_strings_skipped(self):
+        """Empty strings should be skipped when inferring date strings."""
+        datas = [
+            {"id": 1, "date_col": ""},
+            {"id": 2, "date_col": "   "},
+            {"id": 3, "date_col": "2022-01-01"},
+            {"id": 4, "date_col": "2022-01-02"},
+        ]
+        df = pd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    def test_polars_empty_strings_skipped(self):
+        """Empty strings should be skipped when inferring date strings."""
+        datas = [
+            {"id": 1, "date_col": ""},
+            {"id": 2, "date_col": "   "},
+            {"id": 3, "date_col": "2022-01-01"},
+            {"id": 4, "date_col": "2022-01-02"},
+        ]
+        df = pl.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    @pytest.mark.skipif(not MODIN_AVAILABLE, reason="modin not installed")
+    def test_modin_empty_strings_skipped(self):
+        """Empty strings should be skipped when inferring date strings."""
+        datas = [
+            {"id": 1, "date_col": ""},
+            {"id": 2, "date_col": "   "},
+            {"id": 3, "date_col": "2022-01-01"},
+            {"id": 4, "date_col": "2022-01-02"},
+        ]
+        df = mpd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    def test_pandas_invalid_dates_not_mistaken(self):
+        """Invalid date strings should not cause field to be marked as temporal."""
+        datas = [
+            {"id": 1, "date_col": "not-a-date"},
+            {"id": 2, "date_col": "hello"},
+            {"id": 3, "date_col": "12345"},
+        ]
+        df = pd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "nominal"
+
+    def test_polars_invalid_dates_not_mistaken(self):
+        """Invalid date strings should not cause field to be marked as temporal."""
+        datas = [
+            {"id": 1, "date_col": "not-a-date"},
+            {"id": 2, "date_col": "hello"},
+            {"id": 3, "date_col": "12345"},
+        ]
+        df = pl.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "nominal"
+
+    @pytest.mark.skipif(not MODIN_AVAILABLE, reason="modin not installed")
+    def test_modin_invalid_dates_not_mistaken(self):
+        """Invalid date strings should not cause field to be marked as temporal."""
+        datas = [
+            {"id": 1, "date_col": "not-a-date"},
+            {"id": 2, "date_col": "hello"},
+            {"id": 3, "date_col": "12345"},
+        ]
+        df = mpd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "nominal"
+
+    def test_pandas_mixed_outliers_with_valid_dates(self):
+        """Mixed outliers (None, empty strings, invalid dates) should not prevent valid date detection."""
+        datas = [
+            {"id": 1, "date_col": None},
+            {"id": 2, "date_col": ""},
+            {"id": 3, "date_col": "   "},
+            {"id": 4, "date_col": "not-a-date"},
+            {"id": 5, "date_col": "2022-01-01"},
+            {"id": 6, "date_col": "2022-01-02"},
+        ]
+        df = pd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    def test_polars_mixed_outliers_with_valid_dates(self):
+        """Mixed outliers (None, empty strings, invalid dates) should not prevent valid date detection."""
+        datas = [
+            {"id": 1, "date_col": None},
+            {"id": 2, "date_col": ""},
+            {"id": 3, "date_col": "   "},
+            {"id": 4, "date_col": "not-a-date"},
+            {"id": 5, "date_col": "2022-01-01"},
+            {"id": 6, "date_col": "2022-01-02"},
+        ]
+        df = pl.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    @pytest.mark.skipif(not MODIN_AVAILABLE, reason="modin not installed")
+    def test_modin_mixed_outliers_with_valid_dates(self):
+        """Mixed outliers (None, empty strings, invalid dates) should not prevent valid date detection."""
+        datas = [
+            {"id": 1, "date_col": None},
+            {"id": 2, "date_col": ""},
+            {"id": 3, "date_col": "   "},
+            {"id": 4, "date_col": "not-a-date"},
+            {"id": 5, "date_col": "2022-01-01"},
+            {"id": 6, "date_col": "2022-01-02"},
+        ]
+        df = mpd.DataFrame(datas)
+        parser = get_parser(df, infer_string_to_date=True)
+        date_field = next(f for f in parser.raw_fields if f["fid"] == "date_col")
+        assert date_field["semanticType"] == "temporal"
+
+    def test_pandas_polars_outlier_handling_consistency(self):
+        """pandas and polars must handle outliers identically."""
+        datas = [
+            {"id": 1, "date_col": None},
+            {"id": 2, "date_col": ""},
+            {"id": 3, "date_col": "not-a-date"},
+            {"id": 4, "date_col": "2022-01-01"},
+        ]
+        pdf = pd.DataFrame(datas)
+        pldf = pl.DataFrame(datas)
+        p1 = get_parser(pdf, infer_string_to_date=True)
+        p2 = get_parser(pldf, infer_string_to_date=True)
+        p1_infer = {f["fid"]: {"semanticType": f["semanticType"], "analyticType": f["analyticType"]} for f in p1.raw_fields}
+        p2_infer = {f["fid"]: {"semanticType": f["semanticType"], "analyticType": f["analyticType"]} for f in p2.raw_fields}
+        assert p1_infer == p2_infer

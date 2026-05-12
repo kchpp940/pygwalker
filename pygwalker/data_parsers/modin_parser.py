@@ -45,34 +45,31 @@ class ModinPandasDataFrameDataParser(BaseDataFrameDataParser[mpd.DataFrame]):
         df.columns = rename_columns(list(df.columns))
         return df
 
+    def _is_numeric_dtype(self, s: mpd.Series) -> bool:
+        return s.dtype.kind in "fcmiu"
+
+    def _is_temporal_dtype(self, s: mpd.Series) -> bool:
+        return s.dtype.kind in "M"
+
+    def _is_integer_dtype(self, s: mpd.Series) -> bool:
+        return s.dtype.kind in "iu"
+
+    def _is_string_like_dtype(self, s: mpd.Series) -> bool:
+        return s.dtype.kind in "bOSUV"
+
+    def _get_sample_values(self, s: mpd.Series, n: int) -> List[Any]:
+        return [s.iloc[i] for i in range(min(len(s), n))]
+
+    def _get_unique_count(self, s: mpd.Series) -> int:
+        return len(s.unique())
+
     def _infer_semantic(self, s: mpd.Series, field_name: str):
-        kind = s.dtype.kind
-
-        if kind in "fcmiu" or is_geo_field(field_name):
-            return "quantitative"
-        if kind in "M":
-            return 'temporal'
-
-        if kind in "bOSUV":
-            for i in range(min(len(s), 20)):
-                if is_temporal_field(s.iloc[i], self.infer_string_to_date):
-                    return 'temporal'
-
-        return "nominal"
+        samples = self._get_sample_values(s, 20)
+        return self._infer_semantic_common(s, field_name, samples)
 
     def _infer_analytic(self, s: mpd.Series, field_name: str):
-        kind = s.dtype.kind
-
-        if is_geo_field(field_name):
-            return "dimension"
-
-        if self.infer_number_to_dimension and kind in "iu" and len(s.unique()) <= 16:
-            return "dimension"
-
-        if kind in "fcmiu":
-            return "measure"
-
-        return "dimension"
+        unique_count = self._get_unique_count(s)
+        return self._infer_analytic_common(s, field_name, unique_count)
 
     @property
     def dataset_type(self) -> str:
