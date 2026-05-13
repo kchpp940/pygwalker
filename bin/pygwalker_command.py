@@ -10,6 +10,8 @@ Updated on Tue November 11 15:15:48 2024
 """
 
 import argparse
+import sys
+from pathlib import Path
 from typing import Tuple
 from pygwalker.services.kanaries_cli_login import kanaries_login
 from pygwalker.services.config import (
@@ -72,6 +74,36 @@ login_parser = subparsers.add_parser(
     formatter_class=argparse.RawTextHelpFormatter
 )
 
+# verify command
+verify_parser = subparsers.add_parser(
+    'verify',
+    help='Run unified verification suite (frontend build, static check, unit tests, regression tests)',
+    add_help=True,
+    description='Run unified verification suite for PyGWalker',
+    formatter_class=argparse.RawTextHelpFormatter
+)
+verify_parser.add_argument(
+    '--skip',
+    nargs='+',
+    default=[],
+    help='Stages to skip (e.g., "Frontend Build" "Static Architecture Check")'
+)
+verify_parser.add_argument(
+    '--no-stop',
+    action='store_true',
+    help='Continue running even if a stage fails'
+)
+verify_parser.add_argument(
+    '--verbose', '-v',
+    action='store_true',
+    help='Show verbose output'
+)
+verify_parser.add_argument(
+    '--quick',
+    action='store_true',
+    help='Quick mode: skip frontend build and run only essential tests'
+)
+
 
 def command_set_config(value: Tuple[str]):
     """
@@ -121,6 +153,39 @@ def command_list_config(_):
     print(config)
 
 
+def command_verify(args):
+    """
+    Run unified verification suite.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Command line arguments from verify parser.
+
+    """
+    from scripts.verify import VerifyRunner, VerifyConfig
+
+    project_root = Path(__file__).resolve().parent.parent
+
+    skip_stages = list(args.skip)
+    if args.quick:
+        skip_stages.extend(["Frontend Build"])
+
+    config = VerifyConfig(
+        project_root=project_root,
+        app_dir=project_root / "app",
+        tests_dir=project_root / "tests",
+        skip_stages=skip_stages,
+        verbose=args.verbose,
+        stop_on_failure=not args.no_stop
+    )
+
+    runner = VerifyRunner(config)
+    success = runner.run()
+
+    sys.exit(0 if success else 1)
+
+
 def main():
     """
     Entry point of the program. It acts like programcontroller and interface 
@@ -157,6 +222,10 @@ def main():
 
     if args.command == 'login':
         kanaries_login()
+        return
+
+    if args.command == 'verify':
+        command_verify(args)
         return
 
     parser.print_help()
