@@ -4,17 +4,16 @@ import { tracker } from "@/utils/tracker";
 import { ComputerDesktopIcon } from "@heroicons/react/24/outline";
 
 import type { ToolbarButtonItem } from "@kanaries/graphic-walker/components/toolbar/toolbar-button";
-import commonStore from "@/store/common";
+import { IAppProps } from "@/interfaces";
+import { VizSpecStore } from "@kanaries/graphic-walker";
 import communicationStore from "@/store/communication";
 
-export function getOpenDesktopTool(): ToolbarButtonItem {
+export function getOpenDesktopTool(props: IAppProps, storeRef: React.MutableRefObject<VizSpecStore | null>): ToolbarButtonItem {
     const onClick = async () => {
-        if (!commonStore.storeRef?.current) return;
-        
         tracker.track("click", { entity: "open_desktop_icon" });
         await communicationStore.comm?.sendMsg("open_in_desktop", {
-            spec: JSON.parse(JSON.stringify(commonStore.storeRef.current?.visList)),
-            fields: JSON.parse(JSON.stringify(commonStore.storeRef.current?.meta)),
+            spec: JSON.parse(JSON.stringify(storeRef.current?.visList)),
+            fields: JSON.parse(JSON.stringify(storeRef.current?.meta)),
         });
     };
     return {

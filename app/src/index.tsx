@@ -18,12 +18,15 @@ import { initJupyterCommunication, initHttpCommunication, streamlitComponentCall
 import communicationStore from "./store/communication"
 import { setConfig } from './utils/userConfig';
 import CodeExportModal from './components/codeExportModal';
-import ExportConfigModal from './components/exportConfigModal';
 import type { IPreviewProps, IChartPreviewProps } from './components/preview';
 import { Preview, ChartPreview } from './components/preview';
 import UploadSpecModal from "./components/uploadSpecModal"
 import UploadChartModal from './components/uploadChartModal';
 import InitModal from './components/initModal';
+import { getSaveTool } from './tools/saveTool';
+import { getExportTool } from './tools/exportTool';
+import { getExportDataframeTool } from './tools/exportDataframe';
+import { getRuncellTool } from './tools/runcellTool';
 import { formatExportedChartDatas } from "./utils/save";
 import { tracker } from "@/utils/tracker";
 import Notification from "./notify"
@@ -46,8 +49,8 @@ import style from './index.css?inline'
 import { currentMediaTheme } from './utils/theme';
 import { AppContext, darkModeContext } from './store/context';
 import FormatSpec from './utils/formatSpec';
+import { getOpenDesktopTool } from './tools/openDesktop';
 import RuncellBanner from './components/runcellBanner';
-import toolRegistry from './tools/registry';
 
 
 const initChart = async (gwRef: React.MutableRefObject<IGWHandler | null>, total: number, props: IAppProps) => {
@@ -150,9 +153,11 @@ const MainApp = observer((props: {children: React.ReactNode, darkMode: "dark" | 
 const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     const gwRef = React.useRef<IGWHandler|null>(null);
     const { userConfig } = props;
+    const [exportOpen, setExportOpen] = useState(false);
     const [mode, setMode] = useState<string>("walker");
     const [visSpec, setVisSpec] = useState(props.visSpec);
     const [hideModeOption, _] = useState(true);
+    const [isChanged, setIsChanged] = useState(false);
     const storeRef = React.useRef<VizSpecStore|null>(null);
     const disposerRef = React.useRef<() => void>(() => {});
     const storeRefProxied = React.useMemo(
@@ -166,7 +171,7 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
                             disposerRef.current = reaction(
                                 () => store.currentVis,
                                 () => {
-                                    commonStore.setIsChanged(store.canUndo);
+                                    setIsChanged((value as VizSpecStore).canUndo);
                                     streamlitComponentCallback({
                                         event: "spec_change",
                                         data: store.exportCode()
@@ -182,10 +187,6 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     );
 
     commonStore.setVersion(props.version!);
-    commonStore.setGwRef(gwRef);
-    commonStore.setStoreRef(storeRef);
-    commonStore.setAppProps(props);
-    commonStore.setSourceInvokeCode(props["sourceInvokeCode"] || "");
 
     useEffect(() => {
         commonStore.setShowCloudTool(props.showCloudTool);
@@ -208,10 +209,23 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
         }, 0);
     }, [mode]);
 
-    toolRegistry.clearCache();
+    const runcellTool = getRuncellTool();
+    const exportTool = getExportTool(setExportOpen);
+    const openInDesktopTool = getOpenDesktopTool(props, storeRef);
+
+    const tools = [runcellTool, exportTool, openInDesktopTool];
+    if (props.env && ["jupyter_widgets", "streamlit", "gradio", "marimo", "anywidget", "web_server"].indexOf(props.env) !== -1 && props.useSaveTool) {
+        const saveTool = getSaveTool(props, gwRef, storeRef, isChanged, setIsChanged);
+        tools.push(saveTool);
+    }
+    if (props.isExportDataFrame) {
+        const exportDataFrameTool = getExportDataframeTool(props, storeRef);
+        tools.push(exportDataFrameTool);
+    }
+
     const toolbarConfig = {
         exclude: ["export_code"],
-        extra: toolRegistry.getAllTools()
+        extra: tools
     }
 
     const enhanceAPI = React.useMemo(() => {
@@ -248,10 +262,9 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     return (
         <React.StrictMode>
             <Notification />
-            <UploadSpecModal />
-            <UploadChartModal />
-            <CodeExportModal />
-            <ExportConfigModal />
+            <UploadSpecModal storeRef={storeRef} setGwIsChanged={setIsChanged} />
+            <UploadChartModal gwRef={gwRef} storeRef={storeRef} dark={useContext(darkModeContext)} />
+            <CodeExportModal open={exportOpen} setOpen={setExportOpen} globalStore={storeRef} sourceCode={props["sourceInvokeCode"] || ""} />
             {
                 !hideModeOption &&
                 <Select onValueChange={modeChange} defaultValue='walker' >

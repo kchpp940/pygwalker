@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
+import type { VizSpecStore } from '@kanaries/graphic-walker/store/visualSpecStore'
 import { tracker } from "@/utils/tracker";
 
 import communicationStore from "../../store/communication";
@@ -12,7 +13,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { badgeVariants } from "@/components/ui/badge";
 import { exportService } from '../../services/export';
 
-const UploadSpecModal: React.FC = observer(() => {
+interface IUploadSpecModal {
+    setGwIsChanged: React.Dispatch<React.SetStateAction<boolean>>;
+    storeRef: React.MutableRefObject<VizSpecStore | null>;
+}
+
+const UploadSpecModal: React.FC<IUploadSpecModal> = observer((props) => {
     const [uploading, setUploading] = useState(false);
     const [specName, setSpecName] = useState("");
     const [isSetToken, setIsSetToken] = useState(false);
@@ -48,9 +54,9 @@ const UploadSpecModal: React.FC = observer(() => {
                 {"fileName": specName, "newToken": isSetToken ? token : ""},
                 30_000
             );
-            commonStore.closeModal("uploadSpec");
+            commonStore.setUploadSpecModalOpen(false);
             uploadSuccess(resp?.data["specFilePath"]);
-            commonStore.setIsChanged(false);
+            props.setGwIsChanged(false);
         } finally {
             setUploading(false);
         }
@@ -63,7 +69,7 @@ const UploadSpecModal: React.FC = observer(() => {
 
     const saveSpecToLocal = () => {
         tracker.track("click", {"entity": "save_spec_to_local_file_button"});
-        const visSpec = commonStore.storeRef?.current?.exportCode();
+        const visSpec = props.storeRef.current?.exportCode();
         if (visSpec) {
             exportService.exportJson({
                 visSpec,
@@ -76,8 +82,8 @@ const UploadSpecModal: React.FC = observer(() => {
                 }
             });
         }
-        commonStore.closeModal("uploadSpec");
-        commonStore.setIsChanged(false);
+        commonStore.setUploadSpecModalOpen(false);
+        props.setGwIsChanged(false);
     };
 
     useEffect(() => {

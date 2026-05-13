@@ -39,6 +39,7 @@ from pygwalker.services.config import get_local_user_id
 from pygwalker.services.spec_pipeline import load_spec
 from pygwalker.services.spec_persistence import build_update_spec_obj, build_upload_spec_obj
 from pygwalker.services.data_parsers import get_parser
+from pygwalker.services.data_pipeline import create_pipeline_builder, DataPipeline
 from pygwalker.services.cloud_service import CloudService
 from pygwalker.services.check_update import check_update
 from pygwalker.services.track import track_event
@@ -349,15 +350,27 @@ class PygWalker:
         spec: Dict[str, Any],
         title: str = "",
         desc: str = "",
+        filters: Optional[List[Dict[str, Any]]] = None,
+        filter_logic: str = "AND",
     ) -> str:
-        # pylint: disable=import-outside-toplevel
         from pygwalker.utils.dsl_transform import dsl_to_workflow
+        from pygwalker.services.data_pipeline import create_pipeline_builder
+        
         workflow = dsl_to_workflow(spec)
-        data = self.data_parser.get_datas_by_payload(workflow)
-        sampled_data = apply_scatter_plot_sampling(spec, data)
+        
+        builder = create_pipeline_builder(self.data_parser)
+        if filters:
+            builder.with_filter(filters, filter_logic)
+        
+        if is_scatter_plot_spec(spec):
+            builder.with_scatter_sampling()
+        
+        pipeline = builder.build()
+        data = pipeline.execute(payload=workflow)
+        
         return render_gw_chart_preview_html(
             single_vis_spec=spec,
-            data=sampled_data,
+            data=data,
             theme_key=self.theme_key,
             title=title,
             desc=desc,
@@ -423,27 +436,39 @@ class PygWalker:
             self.cloud_service.write_config_to_cloud(path, json.dumps(spec_obj))
             return {"specFilePath": path}
 
+        def _create_pipeline_with_filters(data: Dict[str, Any]) -> DataPipeline:
+            filters = data.get("filters", [])
+            filter_logic = data.get("filterLogic", "AND")
+            builder = create_pipeline_builder(self.data_parser)
+            if filters:
+                builder.with_filter(filters, filter_logic)
+            return builder.build()
+
         def _get_datas(data: Dict[str, Any]):
             sql = data["sql"]
-            datas = self.data_parser.get_datas_by_sql(sql)
+            pipeline = _create_pipeline_with_filters(data)
+            datas = pipeline.execute(sql=sql)
             return {
                 "datas": datas
             }
 
         def _get_datas_by_payload(data: Dict[str, Any]):
-            datas = self.data_parser.get_datas_by_payload(data["payload"])
+            pipeline = _create_pipeline_with_filters(data)
+            datas = pipeline.execute(payload=data["payload"])
             return {
                 "datas": datas
             }
 
         def _batch_get_datas_by_sql(data: Dict[str, Any]):
-            result = self.data_parser.batch_get_datas_by_sql(data["queryList"])
+            pipeline = _create_pipeline_with_filters(data)
+            result = pipeline.execute_batch(sql_list=data["queryList"])
             return {
                 "datas": result
             }
 
         def _batch_get_datas_by_payload(data: Dict[str, Any]):
-            result = self.data_parser.batch_get_datas_by_payload(data["queryList"])
+            pipeline = _create_pipeline_with_filters(data)
+            result = pipeline.execute_batch(payload_list=data["queryList"])
             return {
                 "datas": result
             }
@@ -517,13 +542,17 @@ class PygWalker:
                 }
 
         def _export_dataframe_by_payload(data: Dict[str, Any]):
-            df = pd.DataFrame(self.data_parser.get_datas_by_payload(data["payload"]))
+            pipeline = _create_pipeline_with_filters(data)
+            datas = pipeline.execute(payload=data["payload"])
+            df = pd.DataFrame(datas)
             GlobalVarManager.set_last_exported_dataframe(df)
             self._last_exported_dataframe = df
 
         def _export_dataframe_by_sql(data: Dict[str, Any]):
             sql = data["sql"]
-            df = pd.DataFrame(self.data_parser.get_datas_by_sql(sql))
+            pipeline = _create_pipeline_with_filters(data)
+            datas = pipeline.execute(sql=sql)
+            df = pd.DataFrame(datas)
             GlobalVarManager.set_last_exported_dataframe(df)
             self._last_exported_dataframe = df
 
@@ -692,12 +721,18 @@ class PygWalker:
         """
         if not self.workflow_list:
             return ""
+        
         datas = []
-        for workflow in self.workflow_list:
+        for workflow, spec in zip(self.workflow_list, self.vis_spec):
             try:
-                datas.append(self.data_parser.get_datas_by_payload(workflow))
+                builder = create_pipeline_builder(self.data_parser)
+                if is_scatter_plot_spec(spec):
+                    builder.with_scatter_sampling()
+                pipeline = builder.build()
+                datas.append(pipeline.execute(payload=workflow))
             except ParserException:
                 datas.append([])
+        
         html = render_gw_preview_html(
             self.vis_spec,
             datas,
@@ -715,7 +750,13 @@ class PygWalker:
 
         if not self.workflow_list:
             return ""
-        data = self.data_parser.get_datas_by_payload(self.workflow_list[chart_index])
+        
+        builder = create_pipeline_builder(self.data_parser)
+        if is_scatter_plot_spec(self.vis_spec[chart_index]):
+            builder.with_scatter_sampling()
+        pipeline = builder.build()
+        data = pipeline.execute(payload=self.workflow_list[chart_index])
+        
         return render_gw_chart_preview_html(
             single_vis_spec=self.vis_spec[chart_index],
             data=data,

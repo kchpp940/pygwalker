@@ -1,5 +1,8 @@
 import type { IFilterCondition, FilterConditionType } from '../interfaces/filter';
 import type { IRow } from '@kanaries/graphic-walker/interfaces';
+import { FilterStage, type PipelineContext } from '../dataSource/dataPipeline';
+
+const filterStage = new FilterStage();
 
 export const getConditionTypeByFieldType = (semanticType: string): FilterConditionType[] => {
     switch (semanticType) {
@@ -83,19 +86,15 @@ export const filterRows = (
     conditions: IFilterCondition[],
     logic: "AND" | "OR"
 ): IRow[] => {
-    const enabledConditions = conditions.filter(c => c.enabled);
+    const context: PipelineContext = {
+        sourceType: 'client',
+        filters: conditions,
+        filterLogic: logic,
+        preserveBoundaries: false,
+        metadata: {}
+    };
     
-    if (enabledConditions.length === 0) {
-        return rows;
-    }
-    
-    return rows.filter(row => {
-        if (logic === "AND") {
-            return enabledConditions.every(condition => matchCondition(row, condition));
-        } else {
-            return enabledConditions.some(condition => matchCondition(row, condition));
-        }
-    });
+    return filterStage.execute(rows, context);
 };
 
 export const estimateFilteredCount = (

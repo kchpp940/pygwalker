@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { observer } from "mobx-react-lite";
+import type { IGWHandler } from "@kanaries/graphic-walker/interfaces";
+import type { VizSpecStore } from '@kanaries/graphic-walker/store/visualSpecStore'
 import { chartToWorkflow } from "@kanaries/graphic-walker"
 import { tracker } from "@/utils/tracker";
 
@@ -10,20 +12,24 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { darkModeContext } from "@/store/context";
 
-const UploadChartModal: React.FC = observer(() => {
+interface IUploadChartModal {
+    gwRef: React.MutableRefObject<IGWHandler | null>;
+    storeRef: React.MutableRefObject<VizSpecStore | null>;
+    dark: string;
+}
+
+const UploadChartModal: React.FC<IUploadChartModal> = observer((props) => {
     const [uploading, setUploading] = useState(false);
     const [chartName, setChartName] = useState("");
     const [datasetName, setDatasetName] = useState("");
     const [isPublic, setIsPublic] = useState(true);
     const [isCreateDashboard, setIsCreateDashboard] = useState(true);
     const [instanceType, setInstanceType] = useState("");
-    const darkMode = React.useContext(darkModeContext);
 
     useEffect(() => {
         if (commonStore.uploadChartModalOpen) {
-            const instanceType = (commonStore.storeRef?.current?.exportCode().length || 0) > 1 ? "dashboard" : "chart";
+            const instanceType = (props.storeRef.current?.exportCode().length || 0) > 1 ? "dashboard" : "chart";
             setChartName(`${instanceType}-${new Date().getTime().toString(16).padStart(16, "0")}`);
             setDatasetName(`dataset-${new Date().getTime().toString(16).padStart(16, "0")}`);
             setIsPublic(true);
@@ -33,7 +39,7 @@ const UploadChartModal: React.FC = observer(() => {
 
     const uploadSuccess = (instanceType: string, instanceId: string, datasetId: string) => {
         const managerUrl = instanceType === "chart" ? `https://kanaries.net/analytics/c/${instanceId}` : `https://kanaries.net/analytics/d/${instanceId}`
-        const shareUrl = instanceType === "chart" ? `https://kanaries.net/analytics/chart/${instanceId}/share?theme=${darkMode}` : `https://kanaries.net/analytics/dashboard/${instanceId}/share?theme=${darkMode}`
+        const shareUrl = instanceType === "chart" ? `https://kanaries.net/analytics/chart/${instanceId}/share?theme=${props.dark}` : `https://kanaries.net/analytics/dashboard/${instanceId}/share?theme=${props.dark}`
         const datsetUrl = `https://kanaries.net/analytics/detail/${datasetId}`
         if (instanceType === "dashboard" && instanceId === "" ) {
             commonStore.setNotification(
@@ -83,7 +89,7 @@ const UploadChartModal: React.FC = observer(() => {
         setUploading(true);
         tracker.track("click", {"entity": "upload_chart_button"});
 
-        const visSpec = commonStore.storeRef?.current?.exportCode()!;
+        const visSpec = props.storeRef.current?.exportCode()!;
         try {
             if (instanceType === "dashboard") {
                 const resp = await communicationStore.comm?.sendMsg(
@@ -113,7 +119,7 @@ const UploadChartModal: React.FC = observer(() => {
                 );
                 uploadSuccess(instanceType, resp?.data.chartId, resp?.data.datasetId);
             }
-            commonStore.closeModal("uploadChart");
+            commonStore.setUploadChartModalOpen(false);
         } finally {
             setUploading(false);
         }

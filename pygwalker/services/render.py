@@ -79,18 +79,22 @@ def apply_scatter_plot_sampling(
     Strategy:
     1. Small datasets (< SCATTER_PLOT_LARGE_DATA_THRESHOLD): no sampling
     2. Large datasets: sample to SCATTER_PLOT_SAMPLE_LIMIT points
+    
+    NOTE: This function now uses the unified SamplingStage internally.
     """
     if not is_scatter_plot_spec(spec):
         return datas
     
-    n = len(datas)
+    from pygwalker.services.data_pipeline import SamplingStage, PipelineContext
     
-    if n <= SCATTER_PLOT_LARGE_DATA_THRESHOLD:
-        return datas
+    sampling_stage = SamplingStage()
+    context = PipelineContext(
+        source_type="client",
+        sampling_strategy="scatter",
+        preserve_boundaries=True
+    )
     
-    sample_size = min(SCATTER_PLOT_SAMPLE_LIMIT, SCATTER_PLOT_LARGE_DATA_THRESHOLD // 2)
-    
-    return smart_sample_datas(datas, sample_size, preserve_boundaries=True)
+    return sampling_stage.execute(datas, context)
 
 
 def render_iframe_messages_html(gid: str) -> str:
