@@ -104,6 +104,15 @@ verify_parser.add_argument(
     help='Quick mode: skip frontend build and run only essential tests'
 )
 
+# dev command - unified development environment management
+dev_parser = subparsers.add_parser(
+    'dev',
+    help='Unified development environment management (setup, build, run servers)',
+    add_help=True,
+    description='PyGWalker unified development environment management',
+    formatter_class=argparse.RawTextHelpFormatter
+)
+
 
 def command_set_config(value: Tuple[str]):
     """
@@ -186,6 +195,29 @@ def command_verify(args):
     sys.exit(0 if success else 1)
 
 
+def command_dev(unknown_args):
+    """
+    Run unified development environment commands.
+
+    Parameters
+    ----------
+    unknown_args : list
+        Remaining command line arguments for dev subcommand.
+
+    """
+    from scripts.dev import main as dev_main
+
+    original_argv = sys.argv
+    sys.argv = [sys.argv[0] + " dev"] + list(unknown_args)
+
+    try:
+        dev_main()
+    except SystemExit as e:
+        sys.exit(e.code)
+    finally:
+        sys.argv = original_argv
+
+
 def main():
     """
     Entry point of the program. It acts like programcontroller and interface 
@@ -204,6 +236,10 @@ def main():
         ("reset_all", command_reset_all_config),
         ("list", command_list_config)
     ]
+
+    if len(sys.argv) > 1 and sys.argv[1] == 'dev':
+        command_dev(sys.argv[2:])
+        return
 
     args = parser.parse_args()
 
