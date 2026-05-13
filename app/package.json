@@ -12,7 +12,13 @@
     "dev": "vite",
     "test:front_end": "vite --host",
     "test": "npm run test:front_end",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "verify:data-pipeline": "node tests/verify-data-pipeline-unification.js",
+    "verify:export-config": "node tests/verify-export-config.js",
+    "verify:export-refactor": "node tests/verify-export-refactor.js",
+    "verify:recommendation": "node tests/verify-recommendation-explanation.js",
+    "verify:all": "npm run verify:data-pipeline && npm run verify:export-config && npm run verify:export-refactor && npm run verify:recommendation"
   },
   "dependencies": {
     "@anywidget/react": "^0.0.8",
