@@ -56,6 +56,10 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Pre-release checks
+        working-directory: ./
+        run: |
+          PYTHONPATH=. python scripts/pre_release_check.py -v --skip-import
       - name: Try building
         working-directory: ./
         run: |

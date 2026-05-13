@@ -104,6 +104,30 @@ verify_parser.add_argument(
     help='Quick mode: skip frontend build and run only essential tests'
 )
 
+# precheck command
+precheck_parser = subparsers.add_parser(
+    'precheck',
+    help='Run pre-release checks (templates, versions, dist, imports, build config)',
+    add_help=True,
+    description='Pre-release validation checks for PyGWalker build and publish',
+    formatter_class=argparse.RawTextHelpFormatter
+)
+precheck_parser.add_argument(
+    '--strict',
+    action='store_true',
+    help='Stop immediately on first failure'
+)
+precheck_parser.add_argument(
+    '--verbose', '-v',
+    action='store_true',
+    help='Show verbose output'
+)
+precheck_parser.add_argument(
+    '--skip-import',
+    action='store_true',
+    help='Skip import checks (useful for CI environment without full install)'
+)
+
 
 def command_set_config(value: Tuple[str]):
     """
@@ -186,6 +210,38 @@ def command_verify(args):
     sys.exit(0 if success else 1)
 
 
+def command_precheck(args):
+    """
+    Run pre-release checks.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Command line arguments from precheck parser.
+
+    """
+    from scripts.pre_release_check import ReleaseChecker, ReleaseCheckConfig
+
+    project_root = Path(__file__).resolve().parent.parent
+
+    config = ReleaseCheckConfig(
+        project_root=project_root,
+        pygwalker_dir=project_root / "pygwalker",
+        templates_dir=project_root / "pygwalker" / "templates",
+        dist_dir=project_root / "pygwalker" / "templates" / "dist",
+        app_dir=project_root / "app",
+        pyproject_path=project_root / "pyproject.toml",
+        verbose=args.verbose,
+        strict=args.strict,
+        skip_import=args.skip_import
+    )
+
+    checker = ReleaseChecker(config)
+    success = checker.run()
+
+    sys.exit(0 if success else 1)
+
+
 def main():
     """
     Entry point of the program. It acts like programcontroller and interface 
@@ -226,6 +282,10 @@ def main():
 
     if args.command == 'verify':
         command_verify(args)
+        return
+
+    if args.command == 'precheck':
+        command_precheck(args)
         return
 
     parser.print_help()
