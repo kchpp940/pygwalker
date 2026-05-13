@@ -151,8 +151,8 @@ class VerifyRunner:
         errors = []
 
         python_scripts = [
-            self.config.tests_dir / "verify_return_structure.py",
-            self.config.tests_dir / "verify_recommendation_explanation.py",
+            self.config.project_root / "tests" / "verification" / "verify_return_structure.py",
+            self.config.project_root / "tests" / "verification" / "verify_recommendation_explanation.py",
         ]
 
         for script in python_scripts:
@@ -226,10 +226,10 @@ class VerifyRunner:
                 print(f"    ✓ {script.name} PASSED")
 
         js_scripts = [
-            self.config.app_dir / "tests" / "verify-end-to-end.js",
-            self.config.app_dir / "tests" / "verify-export-config.js",
-            self.config.app_dir / "tests" / "verify-export-refactor.js",
-            self.config.app_dir / "tests" / "verify-recommendation-explanation.js",
+            self.config.app_dir / "tests" / "verification" / "verify-end-to-end.js",
+            self.config.app_dir / "tests" / "verification" / "verify-export-config.js",
+            self.config.app_dir / "tests" / "verification" / "verify-export-refactor.js",
+            self.config.app_dir / "tests" / "verification" / "verify-recommendation-explanation.js",
         ]
 
         for script in js_scripts:
@@ -262,13 +262,14 @@ class VerifyRunner:
         return all_passed, all_output, "; ".join(errors) if errors else None
 
     def stage_python_unit_tests(self) -> Tuple[bool, List[str], Optional[str]]:
-        print("  Running pytest on tests/ directory...")
+        print("  Running pytest on tests/unit/ and tests/integration/ directories...")
 
         cmd = [
             sys.executable, "-m", "pytest",
             "-v",
             "--tb=short",
-            "tests/"
+            "tests/unit/",
+            "tests/integration/"
         ]
 
         returncode, stdout, stderr = self._run_command(
@@ -296,10 +297,10 @@ class VerifyRunner:
         errors = []
 
         key_test_files = [
-            "tests/test_spec_pipeline.py",
-            "tests/test_data_parsers.py",
-            "tests/test_field_quality.py",
-            "tests/test_field_quality_integration.py",
+            "tests/integration/test_spec_pipeline.py",
+            "tests/integration/test_data_parsers.py",
+            "tests/unit/test_field_quality.py",
+            "tests/integration/test_field_quality_integration.py",
         ]
 
         for test_file in key_test_files:

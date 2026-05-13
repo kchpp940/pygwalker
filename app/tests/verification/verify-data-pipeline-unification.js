@@ -12,8 +12,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const appRoot = path.join(__dirname, '..', 'src');
-const pygRoot = path.join(__dirname, '..', '..', 'pygwalker');
+const appRoot = path.join(__dirname, '..', '..', 'src');
+const pygRoot = path.join(__dirname, '..', '..', '..', 'pygwalker');
 
 const passed = [];
 const failed = [];

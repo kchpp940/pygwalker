@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const APP_PATH = path.resolve(__dirname, '..', 'src');
+const APP_PATH = path.resolve(__dirname, '..', '..', 'src');
 
 function readFile(filePath) {
     return fs.readFileSync(filePath, 'utf-8');

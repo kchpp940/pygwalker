@@ -183,7 +183,7 @@ jobs:
       
       - name: Run Notebook Tests (Linux, core group only)
         if: runner.os == 'Linux' && matrix.test-group == 'core'
-        working-directory: ./tests
+        working-directory: ./tests/notebooks
         id: notebook-tests
         run: |
           echo "::group::Notebook Tests"
@@ -205,8 +205,8 @@ jobs:
         with:
           name: notebooks-${{ matrix.os }}-${{ matrix.python-version }}
           path: |
-            ./tests/main.html
-            ./tests/*.html
+            ./tests/notebooks/main.html
+            ./tests/notebooks/*.html
           retention-days: 7
       
       - name: Python Test Summary

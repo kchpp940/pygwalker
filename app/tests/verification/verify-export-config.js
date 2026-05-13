@@ -47,7 +47,7 @@ console.log('\n╔════════════════════�
 console.log('║      Export Configuration Flow REAL Branch Verification      ║');
 console.log('╚═══════════════════════════════════════════════════════════════╝\n');
 
-const appRoot = path.join(__dirname, '..', 'src');
+const appRoot = path.join(__dirname, '..', '..', 'src');
 const exportConfigPath = path.join(appRoot, 'components', 'exportConfigModal', 'index.tsx');
 const exportConfigContent = fs.readFileSync(exportConfigPath, 'utf-8');
 

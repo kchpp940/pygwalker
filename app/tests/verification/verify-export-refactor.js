@@ -14,7 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const appRoot = path.join(__dirname, '..', 'src');
+const appRoot = path.join(__dirname, '..', '..', 'src');
 const passed = [];
 const failed = [];
 const failures = [];

@@ -14,7 +14,8 @@ import json
 import importlib.util
 
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(TEST_DIR)
+INTEGRATION_DIR = os.path.dirname(TEST_DIR)
+PROJECT_DIR = os.path.dirname(INTEGRATION_DIR)
 
 module_path = os.path.join(PROJECT_DIR, "pygwalker", "services", "recommendation_explainer.py")
 spec = importlib.util.spec_from_file_location("recommendation_explainer", module_path)
